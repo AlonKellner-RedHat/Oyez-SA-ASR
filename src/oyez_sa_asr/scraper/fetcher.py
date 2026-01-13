@@ -3,6 +3,7 @@
 
 import asyncio
 import json
+import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
@@ -143,12 +144,23 @@ class AdaptiveFetcher:
                 retry.append((req, count + 1))
         return successes, retry
 
+    def _adjust_parallelism(
+        self, parallelism: int, has_retry: bool, current_rate: float, best_rate: float
+    ) -> tuple[int, float, bool]:
+        """Adjust parallelism based on failures and throughput. Returns (new_p, new_best, frozen)."""
+        if has_retry:
+            return max(1, parallelism // 2), best_rate, True
+        if current_rate < best_rate * 0.9:  # Rate dropped >10% → backoff
+            return max(1, parallelism // 2), best_rate, True
+        new_best = max(best_rate, current_rate)
+        return min(parallelism * 2, self.max_parallelism), new_best, False
+
     async def fetch_batch_adaptive(
         self,
         requests: Sequence[RequestMetadata],
         on_progress: ProgressCallback | None = None,
     ) -> list[FetchResult]:
-        """Fetch with exponential backoff: doubles on success, halves on failure."""
+        """Fetch with rate-based adaptive parallelism: increases while rate improves."""
         if not requests:
             return []
 
@@ -156,21 +168,26 @@ class AdaptiveFetcher:
         if not pending:
             return results
 
-        total, parallelism = len(requests), 1
+        total, parallelism, best_rate, frozen = len(requests), 1, 0.0, False
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             while pending:
                 wave_items = pending[: min(parallelism, len(pending))]
                 pending = pending[len(wave_items) :]
+
+                start = time.monotonic()
                 wave_results = await self._execute_wave(
                     client, [r for r, _ in wave_items]
                 )
+                elapsed = max(time.monotonic() - start, 0.001)
                 successes, retry = self._process_wave_results(wave_items, wave_results)
 
-                parallelism = (
-                    max(1, parallelism // 2)
-                    if retry
-                    else min(parallelism * 2, self.max_parallelism)
-                )
+                current_rate = len(successes) / elapsed
+                if not frozen:
+                    parallelism, best_rate, frozen = self._adjust_parallelism(
+                        parallelism, bool(retry), current_rate, best_rate
+                    )
+                elif retry:
+                    parallelism = max(1, parallelism // 2)
                 pending = retry + pending
 
                 for result in successes:
