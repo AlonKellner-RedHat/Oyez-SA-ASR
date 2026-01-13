@@ -216,7 +216,7 @@ class AdaptiveFetcher:
         requests: Sequence[RequestMetadata],
         on_progress: ProgressCallback | None = None,
     ) -> list[FetchResult]:
-        """Fetch requests with streaming progress updates.
+        """Fetch requests with streaming progress updates and true parallel execution.
 
         Args:
             requests: The requests to fetch.
@@ -230,42 +230,28 @@ class AdaptiveFetcher:
         if not requests:
             return []
 
-        self._update_semaphore()
         total = len(requests)
-        completed = 0
         results: list[FetchResult | None] = [None] * total
+        completed = 0
+
+        # Use max_parallelism directly for true parallelism
+        semaphore = asyncio.Semaphore(self.max_parallelism)
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
 
             async def fetch_with_index(idx: int, req: RequestMetadata) -> None:
                 nonlocal completed
-                result = await self._fetch_one(client, req)
-                results[idx] = result
-                completed += 1
-                if on_progress:
-                    on_progress(completed, total, result)
+                async with semaphore:
+                    result = await self._fetch_one(client, req)
+                    results[idx] = result
+                    completed += 1
+                    if on_progress:
+                        on_progress(completed, total, result)
 
-            # Create all tasks with semaphore control
-            async def fetch_with_semaphore(idx: int, req: RequestMetadata) -> None:
-                if self._semaphore is None:
-                    self._update_semaphore()
-                async with self._semaphore:  # type: ignore[union-attr]
-                    await fetch_with_index(idx, req)
-
-            tasks = [fetch_with_semaphore(i, req) for i, req in enumerate(requests)]
+            tasks = [fetch_with_index(i, req) for i, req in enumerate(requests)]
             await asyncio.gather(*tasks)
 
-        # Adjust parallelism based on results
-        final_results = [r for r in results if r is not None]
-        has_errors = any(not r.success and not r.from_cache for r in final_results)
-        has_new_successes = any(r.success and not r.from_cache for r in final_results)
-
-        if has_errors:
-            self._decrease_parallelism()
-        elif has_new_successes:
-            self._increase_parallelism(batch_size=total)
-
-        return final_results
+        return [r for r in results if r is not None]
 
     @classmethod
     def create(

@@ -90,6 +90,10 @@ def scrape_cases(
         int,
         typer.Option("--ttl-days", "-t", help="Cache TTL in days"),
     ] = 30,
+    parallelism: Annotated[
+        int,
+        typer.Option("--parallelism", "-p", help="Max concurrent requests"),
+    ] = 50,
 ) -> None:
     """Scrape detailed case information from the Oyez API."""
     # Check if index file exists
@@ -102,6 +106,7 @@ def scrape_cases(
     console.print(f"  Index file: {index_file}")
     console.print(f"  Cache dir: {cache_dir}")
     console.print(f"  Cache TTL: {ttl_days} days")
+    console.print(f"  Parallelism: {parallelism}")
     console.print()
 
     # Load index and extract hrefs
@@ -118,7 +123,9 @@ def scrape_cases(
     requests = [RequestMetadata(url=href) for href in hrefs]
 
     # Fetch all requests with streaming progress
-    fetcher = AdaptiveFetcher.create(cache_dir, ttl_days=ttl_days)
+    fetcher = AdaptiveFetcher.create(
+        cache_dir, ttl_days=ttl_days, max_parallelism=parallelism
+    )
 
     # Stats tracking
     stats = {"cached": 0, "new": 0, "failed": 0}
