@@ -22,40 +22,15 @@ class AdaptiveFetcher:
         self,
         cache: FileCache,
         *,
-        initial_parallelism: int = 1,
         max_parallelism: int = 10,
         timeout: float = 30.0,
+        max_retries: int = 3,
     ) -> None:
         """Initialize the fetcher."""
         self.cache = cache
-        self.parallelism = initial_parallelism
         self.max_parallelism = max_parallelism
         self.timeout = timeout
-        self._frozen = False
-        self._semaphore: asyncio.Semaphore | None = None
-
-    def _update_semaphore(self) -> None:
-        """Update the semaphore to match current parallelism."""
-        self._semaphore = asyncio.Semaphore(self.parallelism)
-
-    def _increase_parallelism(self, batch_size: int | None = None) -> None:
-        """Increase parallelism if not frozen and below max."""
-        if self._frozen:
-            return
-        max_allowed = (
-            min(self.max_parallelism, batch_size)
-            if batch_size
-            else self.max_parallelism
-        )
-        if self.parallelism < max_allowed:
-            self.parallelism += 1
-            self._update_semaphore()
-
-    def _decrease_parallelism(self) -> None:
-        """Halve parallelism and freeze increases."""
-        self._frozen = True
-        self.parallelism = max(1, self.parallelism // 2)
-        self._update_semaphore()
+        self.max_retries = max_retries
 
     def _parse_cached_response(self, raw_bytes: bytes, content_type: str) -> object:
         """Parse cached raw bytes based on content type."""
@@ -70,27 +45,27 @@ class AdaptiveFetcher:
         transient_codes = {429, 502, 503, 504}
         return result.status_code in transient_codes or result.status_code is None
 
-    async def _fetch_one(
-        self,
-        client: httpx.AsyncClient,
-        request: RequestMetadata,
-        cache_failures: bool = True,
-    ) -> FetchResult:
-        """Fetch a single request, using cache if available."""
+    def _check_cache(self, request: RequestMetadata) -> FetchResult | None:
+        """Check cache for a request, return result if cached."""
         cached = self.cache.get(request)
-        if cached is not None:
-            content_type = cached.meta.content_type
-            data = self._parse_cached_response(cached.response, content_type)
-            return FetchResult(
-                url=request.url,
-                success=True,
-                status_code=cached.status_code,
-                data=data,
-                raw_data=cached.response,
-                content_type=content_type,
-                from_cache=True,
-            )
+        if cached is None:
+            return None
+        content_type = cached.meta.content_type
+        data = self._parse_cached_response(cached.response, content_type)
+        return FetchResult(
+            url=request.url,
+            success=True,
+            status_code=cached.status_code,
+            data=data,
+            raw_data=cached.response,
+            content_type=content_type,
+            from_cache=True,
+        )
 
+    async def _fetch_network(
+        self, client: httpx.AsyncClient, request: RequestMetadata
+    ) -> FetchResult:
+        """Fetch from network only (no cache check), cache transient failures not stored."""
         try:
             response = await client.request(
                 method=request.method, url=request.url, headers=request.headers
@@ -118,102 +93,86 @@ class AdaptiveFetcher:
                 status_code=e.response.status_code,
                 error=str(e),
             )
-            if cache_failures or not self._is_transient_failure(result):
+            if not self._is_transient_failure(result):
                 self.cache.set(request, result)
             return result
 
         except httpx.RequestError as e:
-            result = FetchResult(url=request.url, success=False, error=str(e))
-            if cache_failures:
-                self.cache.set(request, result)
-            return result
-
-    async def _fetch_with_semaphore(
-        self, client: httpx.AsyncClient, request: RequestMetadata
-    ) -> FetchResult:
-        """Fetch with semaphore-controlled concurrency."""
-        if self._semaphore is None:
-            self._update_semaphore()
-        async with self._semaphore:  # type: ignore[union-attr]
-            return await self._fetch_one(client, request)
-
-    async def fetch_batch(
-        self, requests: Sequence[RequestMetadata]
-    ) -> list[FetchResult]:
-        """Fetch a batch of requests with adaptive parallelism."""
-        if not requests:
-            return []
-        self._update_semaphore()
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            tasks = [self._fetch_with_semaphore(client, req) for req in requests]
-            results = await asyncio.gather(*tasks)
-        has_errors = any(not r.success and not r.from_cache for r in results)
-        has_new_successes = any(r.success and not r.from_cache for r in results)
-        if has_errors:
-            self._decrease_parallelism()
-        elif has_new_successes:
-            self._increase_parallelism(batch_size=len(requests))
-        return list(results)
-
-    async def fetch_one(self, request: RequestMetadata) -> FetchResult:
-        """Fetch a single request."""
-        results = await self.fetch_batch([request])
-        return results[0]
+            return FetchResult(url=request.url, success=False, error=str(e))
 
     async def _execute_wave(
         self, client: httpx.AsyncClient, wave: list[RequestMetadata]
     ) -> list[FetchResult]:
-        """Execute a wave of requests in parallel."""
-        tasks = [self._fetch_one(client, req, cache_failures=False) for req in wave]
+        """Execute a wave of network requests in parallel (no cache check)."""
+        tasks = [self._fetch_network(client, req) for req in wave]
         return list(await asyncio.gather(*tasks))
+
+    def _partition_cached(
+        self, requests: Sequence[RequestMetadata], on_progress: ProgressCallback | None
+    ) -> tuple[list[FetchResult], list[tuple[RequestMetadata, int]]]:
+        """Partition requests into cached results and uncached (with retry count 0)."""
+        results: list[FetchResult] = []
+        needs_fetch: list[tuple[RequestMetadata, int]] = []
+        total = len(requests)
+        for request in requests:
+            cached = self._check_cache(request)
+            if cached:
+                results.append(cached)
+                if on_progress:
+                    on_progress(len(results), total, cached, 0)
+            else:
+                needs_fetch.append((request, 0))
+        return results, needs_fetch
+
+    def _process_wave_results(
+        self,
+        wave_items: list[tuple[RequestMetadata, int]],
+        wave_results: list[FetchResult],
+    ) -> tuple[list[FetchResult], list[tuple[RequestMetadata, int]]]:
+        """Separate wave results into successes and items needing retry."""
+        successes, retry = [], []
+        for i, result in enumerate(wave_results):
+            req, count = wave_items[i]
+            if (
+                result.success
+                or not self._is_transient_failure(result)
+                or count >= self.max_retries
+            ):
+                successes.append(result)
+            else:
+                retry.append((req, count + 1))
+        return successes, retry
 
     async def fetch_batch_adaptive(
         self,
         requests: Sequence[RequestMetadata],
         on_progress: ProgressCallback | None = None,
     ) -> list[FetchResult]:
-        """Fetch with exponential backoff: doubles parallelism on success, halves on failure."""
+        """Fetch with exponential backoff: doubles on success, halves on failure."""
         if not requests:
             return []
 
-        pending = list(requests)
-        results: list[FetchResult] = []
-        parallelism = 1
-        total = len(requests)
+        results, pending = self._partition_cached(requests, on_progress)
+        if not pending:
+            return results
 
+        total, parallelism = len(requests), 1
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             while pending:
-                # Take next wave
-                wave_size = min(parallelism, len(pending))
-                wave = pending[:wave_size]
-                pending = pending[wave_size:]
+                wave_items = pending[: min(parallelism, len(pending))]
+                pending = pending[len(wave_items) :]
+                wave_results = await self._execute_wave(
+                    client, [r for r, _ in wave_items]
+                )
+                successes, retry = self._process_wave_results(wave_items, wave_results)
 
-                # Execute wave
-                wave_results = await self._execute_wave(client, wave)
+                parallelism = (
+                    max(1, parallelism // 2)
+                    if retry
+                    else min(parallelism * 2, self.max_parallelism)
+                )
+                pending = retry + pending
 
-                # Separate successes and transient failures
-                successes = []
-                transient_failures = []
-                for i, result in enumerate(wave_results):
-                    if result.success or result.from_cache:
-                        successes.append(result)
-                    elif self._is_transient_failure(result):
-                        transient_failures.append(wave[i])
-                    else:
-                        # Permanent failure - add to results as-is
-                        successes.append(result)
-
-                # Handle transient failures
-                if transient_failures:
-                    # Halve parallelism
-                    parallelism = max(1, parallelism // 2)
-                    # Re-queue failed requests at front
-                    pending = transient_failures + pending
-                else:
-                    # Double parallelism on full success
-                    parallelism = min(parallelism * 2, self.max_parallelism)
-
-                # Add successes to results and call progress for each
                 for result in successes:
                     results.append(result)
                     if on_progress:
@@ -221,20 +180,31 @@ class AdaptiveFetcher:
 
         return results
 
+    async def fetch_one(self, request: RequestMetadata) -> FetchResult:
+        """Fetch a single request (convenience wrapper)."""
+        results = await self.fetch_batch_adaptive([request])
+        return results[0]
+
+    async def fetch_batch(
+        self, requests: Sequence[RequestMetadata]
+    ) -> list[FetchResult]:
+        """Fetch a batch (alias for fetch_batch_adaptive without progress)."""
+        return await self.fetch_batch_adaptive(requests)
+
     @classmethod
     def create(
         cls,
         cache_dir: Path,
         ttl_days: int = 30,
-        initial_parallelism: int = 1,
         max_parallelism: int = 10,
         timeout: float = 30.0,
+        max_retries: int = 3,
     ) -> "AdaptiveFetcher":
         """Create a fetcher with a new cache."""
         cache = FileCache(cache_dir, ttl_days=ttl_days)
         return cls(
             cache,
-            initial_parallelism=initial_parallelism,
             max_parallelism=max_parallelism,
             timeout=timeout,
+            max_retries=max_retries,
         )
