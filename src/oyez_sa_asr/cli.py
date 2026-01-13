@@ -1,7 +1,8 @@
 # Edited by Claude
-"""Console script for oyez_sa_asr."""
+"""Console script for oyez_sa_asr with scrape/process subcommands."""
 
 import asyncio
+import json
 from pathlib import Path
 from typing import Annotated
 
@@ -9,10 +10,20 @@ import typer
 from rich.console import Console
 
 from ._example import example
-from .scraper import AdaptiveFetcher, OyezCasesTraverser, parse_cached_cases
+from .scraper import (
+    AdaptiveFetcher,
+    OyezCasesTraverser,
+    RequestMetadata,
+    parse_cached_cases,
+)
 
 app = typer.Typer()
+scrape_app = typer.Typer(help="Scrape data from Oyez API")
+process_app = typer.Typer(help="Process cached data into structured files")
 console = Console()
+
+app.add_typer(scrape_app, name="scrape")
+app.add_typer(process_app, name="process")
 
 
 @app.command()
@@ -23,12 +34,15 @@ def main() -> None:
     example()
 
 
-@app.command()
-def scrape_cases(
+# === SCRAPE COMMANDS ===
+
+
+@scrape_app.command(name="index")
+def scrape_index(
     cache_dir: Annotated[
         Path,
         typer.Option("--cache-dir", "-c", help="Directory for caching requests"),
-    ] = Path(".cache"),
+    ] = Path(".cache/index"),
     max_pages: Annotated[
         int | None,
         typer.Option("--max-pages", "-m", help="Max pages to fetch (unlimited)"),
@@ -42,8 +56,8 @@ def scrape_cases(
         typer.Option("--ttl-days", "-t", help="Cache TTL in days"),
     ] = 30,
 ) -> None:
-    """Scrape cases from the Oyez API."""
-    console.print("[bold]Scraping Oyez cases[/bold]")
+    """Scrape case index pages from the Oyez API."""
+    console.print("[bold]Scraping Oyez case index[/bold]")
     console.print(f"  Cache dir: {cache_dir}")
     console.print(f"  Max pages: {max_pages or 'unlimited'}")
     console.print(f"  Per page: {per_page}")
@@ -59,19 +73,79 @@ def scrape_cases(
     console.print(f"[bold green]Done![/bold green] Fetched {len(cases)} cases total.")
 
 
-@app.command()
-def parse_cases_index(
+@scrape_app.command(name="cases")
+def scrape_cases(
+    index_file: Annotated[
+        Path,
+        typer.Option("--index-file", "-i", help="Path to cases_index.json"),
+    ] = Path("data/index/cases_index.json"),
+    cache_dir: Annotated[
+        Path,
+        typer.Option("--cache-dir", "-c", help="Directory for caching requests"),
+    ] = Path(".cache/cases"),
+    ttl_days: Annotated[
+        int,
+        typer.Option("--ttl-days", "-t", help="Cache TTL in days"),
+    ] = 30,
+) -> None:
+    """Scrape detailed case information from the Oyez API."""
+    # Check if index file exists
+    if not index_file.exists():
+        console.print(f"[red]Error:[/red] Index file not found: {index_file}")
+        console.print("Run 'process index' first to generate the index.")
+        raise typer.Exit(1)
+
+    console.print("[bold]Scraping Oyez case details[/bold]")
+    console.print(f"  Index file: {index_file}")
+    console.print(f"  Cache dir: {cache_dir}")
+    console.print(f"  Cache TTL: {ttl_days} days")
+    console.print()
+
+    # Load index and extract hrefs
+    with index_file.open() as f:
+        index_data = json.load(f)
+
+    cases = index_data.get("cases", [])
+    hrefs = [case["href"] for case in cases if case.get("href")]
+
+    console.print(f"Found {len(hrefs)} case URLs to fetch")
+    console.print()
+
+    # Create requests for all case hrefs
+    requests = [RequestMetadata(url=href) for href in hrefs]
+
+    # Fetch all in parallel (throttled by AdaptiveFetcher)
+    fetcher = AdaptiveFetcher.create(cache_dir, ttl_days=ttl_days)
+    results = asyncio.run(fetcher.fetch_batch(requests))
+
+    # Report results
+    cached = sum(1 for r in results if r.from_cache)
+    new_fetches = sum(1 for r in results if r.success and not r.from_cache)
+    failures = sum(1 for r in results if not r.success)
+
+    console.print()
+    console.print("[bold green]Done![/bold green]")
+    console.print(f"  Cached: {cached}")
+    console.print(f"  New fetches: {new_fetches}")
+    console.print(f"  Failures: {failures}")
+
+
+# === PROCESS COMMANDS ===
+
+
+@process_app.command(name="index")
+def process_index(
     cache_dir: Annotated[
         Path,
         typer.Option("--cache-dir", "-c", help="Directory with cached responses"),
-    ] = Path(".cache"),
+    ] = Path(".cache/index"),
     output: Annotated[
         Path,
         typer.Option("--output", "-o", help="Output JSON file path"),
-    ] = Path("data/cases_index.json"),
+    ] = Path("data/index/cases_index.json"),
 ) -> None:
-    """Parse cached cases into a structured index file."""
-    console.print("[bold]Parsing cached cases[/bold]")
+    """Parse cached case index into a structured JSON file."""
+    console.print("[bold]Parsing cached case index[/bold]")
     console.print(f"  Cache dir: {cache_dir}")
     console.print(f"  Output: {output}")
     console.print()
@@ -80,7 +154,7 @@ def parse_cases_index(
 
     if index.total_cases == 0:
         console.print("[yellow]Warning:[/yellow] No cached cases found.")
-        console.print("Run 'scrape-cases' first to fetch cases from the API.")
+        console.print("Run 'scrape index' first to fetch cases from the API.")
         return
 
     index.save(output)
