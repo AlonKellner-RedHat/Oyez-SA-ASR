@@ -1,3 +1,7 @@
+[build-system]
+build-backend = "hatchling.build"
+requires = [ "hatch-vcs", "hatchling" ]
+
 [project]
 name = "oyez-sa-asr"
 description = "Oyez project scraper, for the SA-ASR task"
@@ -32,8 +36,14 @@ scripts.oyez_sa_asr = "oyez_sa_asr.cli:app"
 [dependency-groups]
 dev = [ "coverage[toml]", "pytest", "pytest-asyncio", "pytest-cov" ]
 
+[tool.hatch.build.targets.wheel]
+packages = [ "src/oyez_sa_asr" ]
+
+[tool.hatch.version]
+source = "vcs"
+
 [tool.uv]
-package = false
+package = true
 python-preference = "only-managed"
 link-mode = "copy"
 

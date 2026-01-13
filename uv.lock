@@ -249,7 +249,7 @@ wheels = [
 
 [[package]]
 name = "oyez-sa-asr"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "httpx" },
     { name = "typer" },
