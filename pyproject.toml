@@ -23,14 +23,14 @@ classifiers = [
 ]
 
 dynamic = [ "version" ]
-dependencies = [ "typer" ]
+dependencies = [ "httpx", "typer" ]
 
 urls = { Homepage = "https://github.com/AlonKellner/oyez_sa_asr.git", Repository = "https://github.com/AlonKellner/oyez_sa_asr.git", Bugs = "https://github.com/AlonKellner/oyez_sa_asr/issues", Changelog = "https://github.com/AlonKellner/oyez_sa_asr/blob/main/CHANGELOG.md" }
 
 scripts.oyez_sa_asr = "oyez_sa_asr.cli:app"
 
 [dependency-groups]
-dev = [ "coverage[toml]", "pytest", "pytest-cov" ]
+dev = [ "coverage[toml]", "pytest", "pytest-asyncio", "pytest-cov" ]
 
 [tool.uv]
 package = false
