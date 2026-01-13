@@ -1,0 +1,7 @@
+# OSV-Scanner configuration file to ignore unpatched vulnerabilities
+# https://google.github.io/osv-scanner/configuration/
+
+# Template for documenting ignored vulnerabilities:
+# [[IgnoredVulns]]
+# id = "GHSA-xxxx-xxxx-xxxx"
+# reason = "Explain why this is safe to ignore"

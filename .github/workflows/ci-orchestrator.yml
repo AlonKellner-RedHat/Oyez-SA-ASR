@@ -1,0 +1,43 @@
+name: CI
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - main
+  workflow_dispatch:
+jobs:
+  # Job 1: Check which files have changed to decide what to do next.
+  check-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      bake: ${{ steps.filter.outputs.bake }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Check for devcontainer file changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          # If any file in .devcontainer/ changes, the 'bake' output will be 'true'.
+          filters: |
+            bake:
+              - '.devcontainer/Dockerfile'
+              - '.devcontainer/bake.hcl'
+              - '.devcontainer/install-scripts/**'
+              - '.github/workflows/ci-buildx-bake.yml'
+  # Job 2: Bake the image, but only if the check above says it's needed.
+  bake:
+    needs: check-changes
+    # This 'if' condition is the key. The job only runs if .devcontainer files changed.
+    if: ${{ needs.check-changes.outputs.bake == 'true' }}
+    uses: ./.github/workflows/ci-buildx-bake.yml
+    secrets: inherit # This passes secrets like DOCKERHUB_TOKEN to the reusable workflow
+  # Job 3: Run pre-commit. This job always runs, but waits for bake if not skipped.
+  pre-commit:
+    needs: [check-changes, bake]
+    # https://github.com/actions/runner/issues/491#issuecomment-850884422
+    if: ${{ always() && (needs.bake.result == 'success' || needs.bake.result == 'skipped') }}
+    uses: ./.github/workflows/pre-commit.yml

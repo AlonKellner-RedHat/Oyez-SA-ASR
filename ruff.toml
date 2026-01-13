@@ -1,0 +1,25 @@
+line-length = 88
+respect-gitignore = true
+
+[lint]
+select = [
+  "ANN",
+  "ARG",
+  "B",
+  "D",
+  "E4",
+  "E7",
+  "E9",
+  "F",
+  "I",
+  "PL",
+  "Q",
+  "RUF",
+  "S",
+  "SIM",
+  "TC",
+  "UP",
+]
+ignore = ["ANN401", "PLR0913", "PLR2004", "S101", "S311", "F403"]
+pydocstyle.convention = "numpy"
+pylint.max-args = 10

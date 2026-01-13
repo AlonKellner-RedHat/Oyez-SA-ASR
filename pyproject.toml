@@ -1,0 +1,67 @@
+[project]
+name = "oyez-sa-asr"
+description = "Oyez project scraper, for the SA-ASR task"
+readme = "README.md"
+
+keywords = [  ]
+maintainers = [ { name = "Alon Kellner", email = "me@alonkellner.com" } ]
+authors = [ { name = "Alon Kellner", email = "me@alonkellner.com" } ]
+requires-python = ">=3.10.0"
+classifiers = [
+  "Development Status :: 3 - Alpha",
+
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Software Development",
+]
+
+dynamic = [ "version" ]
+dependencies = [ "typer" ]
+
+urls = { Homepage = "https://github.com/AlonKellner/oyez_sa_asr.git", Repository = "https://github.com/AlonKellner/oyez_sa_asr.git", Bugs = "https://github.com/AlonKellner/oyez_sa_asr/issues", Changelog = "https://github.com/AlonKellner/oyez_sa_asr/blob/main/CHANGELOG.md" }
+
+scripts.oyez_sa_asr = "oyez_sa_asr.cli:app"
+
+[dependency-groups]
+dev = [ "coverage[toml]", "pytest", "pytest-cov" ]
+
+[tool.uv]
+package = false
+python-preference = "only-managed"
+link-mode = "copy"
+
+[tool.pytest.ini_options]
+pythonpath = "./src"
+
+[tool.coverage.run]
+omit = [ "src/oyez_sa_asr/__init__.py" ]
+
+[tool.ty.environment]
+python = "./.venv"
+
+[tool.ty.src]
+exclude = [ "./.ties/**", "./.claude/**" ]
+
+[tool.rumdl]
+disable = [ "MD052" ]
+
+[tool.lintok]
+max_tokens = 2048
+exclude = [ "uv.lock", "lcov.info", "pylock.toml", "requirements.txt" ]
+
+[tool.typos.files]
+extend-exclude = [ "**/.env.*" ]
+
+[tool.claude-pre-commit]
+exclude-files = [ "lcov.info" ]
+ignore-rules = [ "shell-script-security", "dockerfile-security" ]
+python-custom-rules = [
+  # Add project-specific rules here
+]

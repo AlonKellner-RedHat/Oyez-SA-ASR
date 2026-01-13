@@ -1,0 +1,133 @@
+#
+# MkDocs Configuration File
+# For more information, see: https://www.mkdocs.org/user-guide/configuration/
+#
+# -- Project Information ------------------------------------------------------
+# The title to use for the documentation.
+site_name: 'Oyez SA-ASR'
+# The URL to the documentation. This is essential for the sitemap.xml to be
+# generated correctly.
+site_url: 'https://AlonKellner.github.io/oyez_sa_asr'
+# A description for the documentation. This is used in the meta tags.
+site_description: 'Oyez project scraper, for the SA-ASR task'
+# The author of the documentation. This is used in the meta tags.
+site_author: 'Alon Kellner'
+# The path to the documentation source files.
+docs_dir: 'docs'
+copyright: 'Copyright &copy; 2026, Alon Kellner'
+# -- Repository Information ---------------------------------------------------
+
+# The URL to the repository.
+repo_url: 'https://github.com/AlonKellner/oyez_sa_asr'
+# The name of the repository.
+repo_name: 'AlonKellner/oyez_sa_asr'
+# -- Theme Configuration ------------------------------------------------------
+# See: https://squidfunk.github.io/mkdocs-material/setup/changing-the-colors/
+theme:
+  name: material
+  # Color palette for light and dark mode.
+  palette:
+    # Palette toggle for automatic mode
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    # Palette toggle for light mode
+    - media: '(prefers-color-scheme: light)'
+      scheme: default
+      primary: 'indigo'
+      accent: 'indigo'
+      toggle:
+        icon: 'material/brightness-7'
+        name: 'Switch to dark mode'
+    # Palette toggle for dark mode
+    - media: '(prefers-color-scheme: dark)'
+      scheme: slate
+      primary: 'black'
+      accent: 'indigo'
+      toggle:
+        icon: 'material/brightness-4'
+        name: 'Switch to system preference'
+  # Fonts for the site.
+  font:
+    text: 'Inter'
+    code: 'Roboto Mono'
+  # Features for a modern look and feel.
+  # See: https://squidfunk.github.io/mkdocs-material/setup/setting-up-navigation/
+  features:
+    - announce.dismiss # Allow users to dismiss the announcement bar
+    - content.code.annotate # Code annotations
+    - content.code.copy # Copy button for code blocks
+    - content.tabs.link # Link content tabs
+    - header.autohide # Hide header on scroll
+    - navigation.instant # Instant loading without page refresh
+    - navigation.instant.progress # Show a progress bar during instant loading
+    - navigation.sections # Render sections in the navigation
+    - navigation.tabs # Top-level navigation tabs
+    - navigation.top # "Back to top" button
+    - navigation.tracking # Track the active page in the navigation
+    - search.highlight # Highlight search terms on the page
+    - search.share # Shareable search results
+    - search.suggest # Search suggestions as you type
+    - toc.follow # Follow the table of contents as you scroll
+# -- Plugins ------------------------------------------------------------------
+# You need to install these plugins via pip.
+# pip install mkdocs-material mkdocs-awesome-pages-plugin mkdocs-minify-plugin mkdocs-git-revision-date-localized-plugin
+plugins:
+  # Built-in search plugin
+  - search
+  # For beautiful navigation that's inferred from your directory structure
+  - awesome-pages:
+      collapse_single_pages: true
+  # Minify HTML and JS files to improve load times
+  - minify:
+      minify_html: true
+      minify_js: true
+      minify_css: true
+  # Show the last updated date from Git
+  - git-revision-date-localized:
+      type: timeago
+      enable_creation_date: true
+# -- Markdown Extensions ------------------------------------------------------
+# These extensions enhance the rendering of your Markdown files.
+# See: https://squidfunk.github.io/mkdocs-material/reference/
+markdown_extensions:
+  # For admonition blocks (note, warning, etc.)
+  - admonition
+  # For adding attributes to Markdown elements
+  - attr_list
+  # Allows for Markdown content within HTML blocks
+  - md_in_html
+  # Python Markdown Extensions (PyMdownx)
+  - pymdownx.details # Collapsible blocks
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys # Add keyboard symbols
+  - pymdownx.snippets # Include content from other files
+  - pymdownx.superfences # Nest code blocks
+  - pymdownx.tabbed: # Content tabs
+      alternate_style: true
+  - pymdownx.tasklist: # Task lists with checkboxes
+      custom_checkbox: true
+# -- Extra Configuration ------------------------------------------------------
+extra:
+  # Social links to display in the footer
+  social:
+    - icon: 'fontawesome/brands/github'
+      link: 'https://github.com/AlonKellner'
+
+# -- Navigation Structure -----------------------------------------------------
+# You can define a manual navigation structure here, but with awesome-pages,
+# it's often easier to manage it via your file structure and .pages files.
+# Example:
+# nav:
+#   - 'Home': 'index.md'
+#   - 'User Guide':
+#     - 'Installation': 'guide/installation.md'
+#     - 'Configuration': 'guide/configuration.md'

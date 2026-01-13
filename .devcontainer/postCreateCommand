@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+set -e # Exit immediately if a command exits with a non-zero status.
+
+# This script runs as the 'vscode' user by default in a dev container.
+
+# --- PART 1: System Dependency Installation ---
+echo "🚀 Ensuring system dependencies are installed..."
+# Check for both socat and screen
+for cmd in socat screen; do
+    if ! command -v "$cmd" &> /dev/null; then
+        echo "   '$cmd' not found. Installing with sudo..."
+        # This is the only command that needs to run as root.
+        sudo apt-get update && sudo apt-get install -y "$cmd"
+        # Break after first install run to avoid redundant apt-get updates
+        break
+    fi
+done
+
+# Re-check after potential installation
+for cmd in socat screen; do
+    if ! command -v "$cmd" &> /dev/null; then
+        echo "   '$cmd' still not found after attempting install. Aborting."
+        exit 1
+    fi
+done
+echo "   System dependencies are ready."
+
+
+# --- PART 2: GPG Agent Forwarding Setup ---
+echo "🚀 Configuring GPG agent forwarding..."
+
+# Configuration
+FORWARD_PORT=23456
+HOST_IP="host.docker.internal"
+CONTAINER_GPG_SOCKET="/home/vscode/.gnupg/S.gpg-agent"
+PUBKEY_IMPORT_FILE="./host_pubkeys.asc"
+LOG_FILE="/tmp/gpg_forwarder_client.log"
+SCREEN_SESSION_NAME="container-gpg-forwarder"
+
+# Import the public keys exported from the host
+if [ -f "${PUBKEY_IMPORT_FILE}" ]; then
+    echo "   Found host public keys. Importing..."
+    gpg --import "${PUBKEY_IMPORT_FILE}"
+    echo "   Public keys imported successfully."
+else
+    echo "   Warning: Could not find host public key file at ${PUBKEY_IMPORT_FILE}."
+fi
+
+# Ensure the .gnupg directory exists with correct permissions
+mkdir -p "$(dirname "$CONTAINER_GPG_SOCKET")"
+chmod 700 "$(dirname "$CONTAINER_GPG_SOCKET")"
+
+# Tell GPG to always use the agent for signing operations.
+echo "   Ensuring gpg.conf is set to use the agent..."
+echo "use-agent" >> /home/vscode/.gnupg/gpg.conf
+
+# Clean up any previous forwarder session and start a new one
+echo "   Starting GPG socket forwarder client in a detached screen session..."
+screen -S "${SCREEN_SESSION_NAME}" -X quit 2>/dev/null || true
+
+screen -dmS "${SCREEN_SESSION_NAME}" \
+    bash -c "socat UNIX-LISTEN:\"${CONTAINER_GPG_SOCKET}\",fork,mode=700 TCP:\"${HOST_IP}:${FORWARD_PORT}\" &> \"${LOG_FILE}\""
+
+# Verification Step
+sleep 1 # Give screen and socat a moment to initialize
+if pgrep -f "socat UNIX-LISTEN:${CONTAINER_GPG_SOCKET}" > /dev/null; then
+    echo "✅ GPG forwarding client is running successfully in screen session '${SCREEN_SESSION_NAME}'."
+else
+    echo "❌ FATAL: GPG forwarding client failed to start."
+    echo "   Check the log file for errors: cat ${LOG_FILE}"
+    exit 1
+fi
+
+
+# --- PART 3: User-level Tool Configuration ---
+echo "🚀 Configuring user tools..."
+git config commit.gpgsign true
+git config tag.gpgsign true
+
+uv python install --default
+uv python install 3.13
+uv tool install pre-commit --with pre-commit-uv --force-reinstall
+uv tool install tox --with tox-uv
+pre-commit install --install-hooks -t pre-commit -t commit-msg -t post-commit -t pre-push -t prepare-commit-msg
+
+echo "✅ All post-create commands completed successfully."

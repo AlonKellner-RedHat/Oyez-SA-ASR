@@ -1,0 +1,15 @@
+services:
+  script:
+    env_file:
+      - .env
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: python
+      args:
+        WORKDIR: ${WORKDIR}
+    networks:
+      - oyez_sa_asr
+networks:
+  oyez_sa_asr:
+    external: true

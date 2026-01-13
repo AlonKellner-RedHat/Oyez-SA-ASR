@@ -1,0 +1,29 @@
+{
+	"mcpServers": {
+		"github": {
+			"type": "http",
+			"url": "https://api.githubcopilot.com/mcp/",
+			"headers": {
+				"Authorization": "Bearer ${env:GITHUB_PERSONAL_ACCESS_TOKEN}",
+				"X-MCP-Toolsets": "context,repos,issues,actions,copilot",
+				"X-MCP-Readonly": "true"
+			}
+		},
+		"repomix": {
+			"command": "repomix",
+			"args": ["--mcp"],
+			"cwd": "/workspaces/ties"
+		},
+		"language-server": {
+			"command": "mcp-language-server",
+			"args": [
+				"--workspace",
+				"/workspaces/ties",
+				"--lsp",
+				"pyright-langserver",
+				"--",
+				"--stdio"
+			]
+		}
+	}
+}

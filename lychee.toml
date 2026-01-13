@@ -1,0 +1,35 @@
+# Lychee link checker configuration
+exclude = [
+  '^https://numpydoc.readthedocs\.io.*',
+  '^https://.*pepy\.tech*',
+  '^https://github\.com/AlonKellner/oyez_sa_asr*',
+  '^https://alonkellner\.github\.io/oyez_sa_asr*',
+  # Shell variables that look like URLs
+  '\$',
+  # Localhost URLs
+  'http.?:\/\/localhost',
+  # Kubernetes service URLs
+  'http.?:\/\/.*\.svc',
+  # OAuth callback paths
+  'oauth2\/callback',
+  # OpenAI API (rate-limited)
+  'api\.openai\.com',
+  # GitHub Copilot MCP (returns 503)
+  'api\.githubcopilot\.com',
+  # Internal domain patterns
+  '\.internal',
+  # GitHub raw content (rate-limited)
+  'githubusercontent\.com',
+  # Python f-strings that look like URLs
+  'f".*"',
+]
+exclude_path = [
+  "uv.lock",
+  "pylock.toml",
+  "requirements.txt",
+  ".devcontainer/Dockerfile",
+  ".devcontainer/install-scripts/",
+  ".github/workflows/publish.yml",
+  "lychee.toml",
+]
+accept = [200, 401, 403, 429, 999]

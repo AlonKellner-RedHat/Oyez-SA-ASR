@@ -1,0 +1,27 @@
+name: pre-commit
+on:
+  workflow_call:
+  workflow_dispatch:
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    container:
+      image: "${{ vars.DOCKERHUB_USERNAME }}/oyez_sa_asr_ci:latest"
+      options: --user root
+      env:
+        GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/
+          key: ${{ runner.os }}
+          restore-keys: |
+            ${{ runner.os }}
+      - uses: actions/checkout@v4
+      - name: git safe directory
+        run: git config --global --add safe.directory $(pwd)
+      - name: postCreateCommand
+        run: .devcontainer/postCreateCommand
+      - name: postStartCommand & pre-commit all
+        run: .devcontainer/postStartCommand

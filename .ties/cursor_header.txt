@@ -1,0 +1,5 @@
+---
+description: General guidelines, and Goal management
+globs:
+alwaysApply: true
+---

@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+set -e # Exit immediately if a command exits with a non-zero status.
+
+echo "Running the devcontainer initializeCommand..."
+
+docker network create -d bridge $1 2>/dev/null || true
+mkdir -p $2/.cache/uv
+mkdir -p $2/.cache/pre-commit
+mkdir -p $2/.cache/pip
+mkdir -p $2/.cache/pysentry
+mkdir -p $2/.cursor
+mkdir -p $2/.vscode-server
+mkdir -p $2/.ssh
+mkdir -p $2/.config/gcloud
+mkdir -p $2/.config/gh
+mkdir -p $2/.kube
+mkdir -p $2/.aws
+touch $2/.gitconfig
+
+ENV_FILE=".devcontainer/.env"
+
+touch $ENV_FILE
+touch ./.env
+
+# GITHUB_PERSONAL_ACCESS_TOKEN validation
+github_token_line=$(grep "^GITHUB_PERSONAL_ACCESS_TOKEN=." "$ENV_FILE" 2>/dev/null || true)
+
+if [ -n "$github_token_line" ]; then
+  echo "Found GITHUB_PERSONAL_ACCESS_TOKEN"
+else
+  echo -e "\033[31m
+⚠️ WARNING: GITHUB_PERSONAL_ACCESS_TOKEN is not set in $ENV_FILE!
+⚠️ https://github.com/settings/personal-access-tokens
+⚠️ Add it to $ENV_FILE like so:
+⚠️ \t\tGITHUB_PERSONAL_ACCESS_TOKEN=<your_personal_access_token_here>
+\033[0m"
+fi
+
+# GPG key validation
+secret_keys=$(gpg --list-secret-keys --keyid-format=long 2>/dev/null)
+
+# Check if the variable is non-empty
+if [ -n "$secret_keys" ]; then
+  echo "Found a GPG key"
+else
+  echo -e "\033[31m
+⚠️ WARNING: Please configure a GPG key for git signoff:
+⚠️ https://docs.github.com/en/authentication/managing-commit-signature-verification/generating-a-new-gpg-key
+⚠️ Then, tell git about it:
+⚠️ https://docs.github.com/en/authentication/managing-commit-signature-verification/telling-git-about-your-signing-key
+\033[0m"
+fi
+
+# git signingkey validation
+signing_key=$(git config user.signingkey 2>/dev/null)
+
+if [ -n "$signing_key" ]; then
+  echo "Found a user.signingkey value"
+else
+  echo -e "\033[31m
+⚠️ WARNING: Please tell git about your GPG key:
+⚠️ https://docs.github.com/en/authentication/managing-commit-signature-verification/telling-git-about-your-signing-key
+\033[0m"
+fi
+
+# --- GPG Configuration ---
+# A high, non-standard port to avoid conflicts.
+FORWARD_PORT=23456
+LOG_FILE="/tmp/gpg_forwarder_host.log"
+PUBKEY_EXPORT_FILE="./.devcontainer/host_pubkeys.asc"
+# Name for the detached screen session for easy management
+SCREEN_SESSION_NAME="devcontainer-gpg-forwarder"
+
+# --- Main Logic ---
+
+# 1. Check for socat and attempt installation if missing
+if ! command -v socat &> /dev/null; then
+    echo "🔎 'socat' not found. Attempting to install..."
+    if [[ "$(uname)" == "Darwin" ]]; then # macOS
+        if command -v brew &> /dev/null; then brew install socat; else echo "⚠️ WARNING: Homebrew not found."; fi
+    elif [[ "$(uname)" == "Linux" ]]; then # Linux
+        if command -v apt-get &> /dev/null; then sudo apt-get update && sudo apt-get install -y socat; else echo "⚠️ WARNING: apt-get not found."; fi
+    else
+        echo "⚠️ WARNING: Unsupported OS '$(uname)'. Please install socat manually."
+    fi
+fi
+
+# 2. Ensure GPG agent is running
+echo "🔎 Checking GPG agent status..."
+killall gpg-agent 2>/dev/null || true # Kill any stuck agents
+gpg-connect-agent /bye > /dev/null    # This will start a new agent if needed
+echo "   GPG agent is ready."
+
+# 3. Get the GPG agent socket path
+GPG_SOCKET_PATH=$(gpgconf --list-dirs agent-socket)
+if [ -z "$GPG_SOCKET_PATH" ]; then
+    echo "⚠️ WARNING: Could not find the GPG agent socket."
+fi
+
+# 4. Clean up any previous forwarder session and start a new one
+echo "🚀 Starting GPG agent forwarder in a detached screen session..."
+# Kill any existing screen session with the same name to ensure a clean start.
+screen -S "${SCREEN_SESSION_NAME}" -X quit 2>/dev/null || true
+
+# --- MODIFIED: Use shell redirection for logging to support older screen versions ---
+# We start a bash shell inside screen, and that shell handles redirecting
+# socat's output to our log file.
+screen -dmS "${SCREEN_SESSION_NAME}" \
+    bash -c "socat TCP-LISTEN:${FORWARD_PORT},reuseaddr,fork UNIX-CONNECT:\"${GPG_SOCKET_PATH}\" &> \"${LOG_FILE}\""
+
+
+# --- Verification Step ---
+sleep 1 # Give the screen session and socat a moment to initialize.
+if lsof -nP -iTCP:${FORWARD_PORT} -sTCP:LISTEN > /dev/null; then
+    echo "✅ GPG forwarder is running successfully in screen session '${SCREEN_SESSION_NAME}'."
+    echo "   Log file available at ${LOG_FILE}"
+    echo "   To view/attach to the session, run: screen -r ${SCREEN_SESSION_NAME}"
+    echo "   To stop the forwarder, run: screen -S ${SCREEN_SESSION_NAME} -X quit"
+else
+    echo "⚠️ WARNING: GPG forwarder failed to start."
+    echo "   Check the log file for errors: cat ${LOG_FILE}"
+fi
+
+# 5. Export public keys
+echo "🔑 Exporting public GPG keys to ${PUBKEY_EXPORT_FILE}..."
+gpg --export --armor > "${PUBKEY_EXPORT_FILE}"
+echo "✅ Public keys exported."

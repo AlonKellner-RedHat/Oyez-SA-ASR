@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+PUBKEY_IMPORT_FILE="./.devcontainer/host_pubkeys.asc"
+
+# NEW: Import the public keys exported from the host
+if [ -f "${PUBKEY_IMPORT_FILE}" ]; then
+    echo "   Found host public keys. Importing..."
+    gpg --import "${PUBKEY_IMPORT_FILE}"
+    rm "${PUBKEY_IMPORT_FILE}"
+    echo "   Public keys imported successfully."
+else
+    echo "   Warning: Could not find host public key file at ${PUBKEY_IMPORT_FILE}."
+fi
+
+uv python upgrade
+uv self update
+pre-commit autoupdate
+uv tool upgrade --all
+uv sync --upgrade
+just pa; status=$?; git diff; (exit $status)

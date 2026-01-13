@@ -1,0 +1,41 @@
+env_list = [ "py313", "path", "coverage" ]
+
+[env_run_base]
+runner = "uv-venv-lock-runner"
+description = "Run test under {base_python}"
+skip_install = true
+commands = [
+  [
+    "uv",
+    "run",
+    "pytest",
+    { replace = "posargs", default = [ "tests" ], extend = true },
+  ],
+]
+
+[env.path]
+base_python = [ "py313" ]
+commands = [
+  [
+    "uv",
+    "run",
+    "pytest",
+    { replace = "posargs", default = [ "tests" ], extend = true },
+  ],
+]
+
+[env.coverage]
+base_python = [ "py313" ]
+commands = [
+  [
+    "uv",
+    "run",
+    "pytest",
+    "tests",
+    "--cov",
+    "--cov-report=term-missing",
+    "--cov-report=lcov:lcov.info",
+    "--cov=src/oyez_sa_asr",
+    "--cov-fail-under=95",
+  ],
+]

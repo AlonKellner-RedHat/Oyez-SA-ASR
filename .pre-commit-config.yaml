@@ -1,0 +1,171 @@
+default_stages: [pre-commit, manual]
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-toml
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: ["--markdown-linebreak-ext=md,mdc"]
+      - id: check-added-large-files
+        args: ["--maxkb=2000"]
+  - repo: https://github.com/biomejs/pre-commit
+    rev: v2.3.10
+    hooks:
+      - id: biome-check
+        name: biome-check (.json, .js, .ts)
+  - repo: https://github.com/reteps/dockerfmt
+    rev: v0.3.9
+    hooks:
+      - id: dockerfmt
+  - repo: local
+    hooks:
+      - id: git-signoff
+        name: git-signoff (commit message)
+        description: Adds a 'Signed-off-by:' trailer to the commit message.
+        entry: scripts/add-signoff.sh
+        language: script
+        always_run: true
+        stages: [prepare-commit-msg]
+      - id: commitlint
+        name: commitlint (commit message)
+        description: check commit message adheres to
+        entry: npx commitlint --edit
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [commit-msg]
+      - id: ties
+        name: ties (configured in pyproject.toml)
+        description: synchronize chosen file contents
+        entry: uvx --from 'ties[yaml]' ties fix
+        language: system
+        pass_filenames: false
+      - id: yamlfmt
+        name: yamlfmt (yaml)
+        description: apply a consistent format to `*.yaml` files
+        entry: yamlfmt
+        language: system
+        types: [yaml]
+      - id: taplo-format
+        name: taplo-format (.toml)
+        description: apply a consistent format to `*.toml` files
+        entry: taplo fmt
+        language: system
+        types: [toml]
+        exclude: ^(pyproject\.toml|tox\.toml|pylock\.toml)$
+      - id: taplo-check
+        name: taplo-check (.toml)
+        description: check the syntax of `*.toml` files
+        entry: taplo check
+        language: system
+        types: [toml]
+      - id: pyproject-fmt
+        name: pyproject-fmt (pyproject.toml)
+        description: apply a consistent format to `pyproject.toml` files
+        entry: uvx pyproject-fmt
+        language: system
+        files: (^|/)pyproject\.toml$
+        require_serial: false
+      - id: tox-toml-fmt
+        name: tox-toml-fmt (tox.toml)
+        description: apply a consistent format to `tox.toml` files
+        entry: uvx tox-toml-fmt
+        language: system
+        files: '(^|/)tox\.toml$'
+      - id: rumdl
+        name: rumdl (.md)
+        description: apply a consistent format to `*.md` files
+        entry: uvx rumdl check --fix
+        language: system
+        types: [markdown]
+      - id: lychee
+        name: lychee (text)
+        description: broken link detection
+        entry: lychee
+        language: system
+        types: [text]
+      - id: uv-sync
+        name: uv-sync (.venv)
+        description: synchronize the environment with the latest tools and dependencies
+        entry: uv sync
+        language: system
+        always_run: true
+        pass_filenames: false
+      - id: uv-requirements
+        name: uv-requirements (requirements.txt)
+        description: generate `requirements.txt` from `pyproject.toml`
+        entry: bash -c "rm -f requirements.txt && uv export --format requirements.txt -o requirements.txt"
+        language: system
+        always_run: true
+        pass_filenames: false
+      - id: uv-pylock
+        name: uv-pylock (pylock.toml)
+        description: generate `pylock.toml` from `pyproject.toml`
+        entry: bash -c "rm -f pylock.toml &&  uv export --format pylock.toml -o pylock.toml"
+        language: system
+        always_run: true
+        pass_filenames: false
+      - id: pysentry
+        name: pysentry (uv.lock)
+        description: check for known vulnerabilities in dependencies
+        entry: uvx pysentry-rs --resolver uv .
+        language: system
+        files: ^(uv\.lock|requirements\.txt)$
+        pass_filenames: false
+      - id: ruff-lint
+        name: ruff-lint (.py)
+        description: run ruff to check and fix Python code style issues
+        entry: uvx ruff check --fix --force-exclude --unsafe-fixes
+        language: system
+        types_or: [python, pyi, jupyter]
+        require_serial: true
+      - id: ruff-format
+        name: ruff-format (.py)
+        description: format Python code using ruff
+        entry: uvx ruff format --force-exclude
+        language: system
+        types_or: [python, pyi, jupyter]
+        require_serial: true
+      - id: ty
+        name: ty (.py)
+        description: run type checks using ty
+        entry: uvx ty check .
+        language: system
+        pass_filenames: false
+        types_or: [python, pyi, jupyter]
+      - id: claude-review
+        name: claude-review (text)
+        description: run Claude Code to review the code
+        entry: .claude/claude-pre-commit.sh
+        language: system
+        pass_filenames: false
+      - id: typos
+        name: typos (text)
+        description: check for typos in text files
+        entry: uvx typos
+        language: system
+        args: [--write-changes, --force-exclude]
+        types: [text]
+      - id: lintok
+        name: lintok (text)
+        description: check for files with too many tokens for AI agents
+        entry: uvx lintok
+        language: system
+        types: [text]
+        require_serial: true
+      - id: tox
+        name: tox (tests)
+        description: run tox to test the project
+        entry: tox -e coverage
+        language: system
+        pass_filenames: false
+      - id: osv-scanner
+        name: osv-scanner (all)
+        description: scan repository for vulnerabilities
+        entry: osv-scanner scan ./
+        language: system
+        pass_filenames: false
