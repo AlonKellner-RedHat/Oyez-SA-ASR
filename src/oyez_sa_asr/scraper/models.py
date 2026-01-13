@@ -59,6 +59,35 @@ def get_extension_for_content_type(content_type: str) -> str:
 
 
 @dataclass
+class ContentVersion:
+    """Represents a unique version of cached content identified by hash."""
+
+    content_hash: str  # SHA256 of raw content
+    first_seen: datetime  # When this version first appeared
+    last_seen: datetime  # When this version was last seen
+    raw_path: str  # Relative path to raw file
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "content_hash": self.content_hash,
+            "first_seen": self.first_seen.isoformat(),
+            "last_seen": self.last_seen.isoformat(),
+            "raw_path": self.raw_path,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ContentVersion":
+        """Create a ContentVersion from a dictionary."""
+        return cls(
+            content_hash=data["content_hash"],
+            first_seen=datetime.fromisoformat(data["first_seen"]),
+            last_seen=datetime.fromisoformat(data["last_seen"]),
+            raw_path=data["raw_path"],
+        )
+
+
+@dataclass
 class RequestMetadata:
     """Metadata about a request."""
 
@@ -74,18 +103,25 @@ class RequestMetadata:
 
 @dataclass
 class CacheMeta:
-    """Metadata for a cached response (stored separately from raw response)."""
+    """Metadata for a cached response with version tracking."""
 
     url: str
     fetched_at: datetime
     expires_at: datetime
     status_code: int
     content_type: str = "application/json"
-    raw_path: str = ""  # Relative path to raw response file
+    raw_path: str = ""  # Deprecated: use versions[].raw_path instead
+    versions: list[ContentVersion] = field(default_factory=list)
 
     def is_expired(self) -> bool:
         """Check if the cache entry has expired."""
         return datetime.now(timezone.utc) > self.expires_at
+
+    def get_latest_version(self) -> ContentVersion | None:
+        """Get the version with the most recent last_seen timestamp."""
+        if not self.versions:
+            return None
+        return max(self.versions, key=lambda v: v.last_seen)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -96,11 +132,14 @@ class CacheMeta:
             "status_code": self.status_code,
             "content_type": self.content_type,
             "raw_path": self.raw_path,
+            "versions": [v.to_dict() for v in self.versions],
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "CacheMeta":
         """Create a CacheMeta from a dictionary."""
+        versions_data = data.get("versions", [])
+        versions = [ContentVersion.from_dict(v) for v in versions_data]
         return cls(
             url=data["url"],
             fetched_at=datetime.fromisoformat(data["fetched_at"]),
@@ -108,6 +147,7 @@ class CacheMeta:
             status_code=data["status_code"],
             content_type=data.get("content_type", "application/json"),
             raw_path=data.get("raw_path", ""),
+            versions=versions,
         )
 
     @classmethod

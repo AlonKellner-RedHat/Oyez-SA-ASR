@@ -6,6 +6,7 @@ from .fetcher import AdaptiveFetcher
 from .models import (
     CacheEntry,
     CacheMeta,
+    ContentVersion,
     FetchResult,
     RequestMetadata,
     get_extension_for_content_type,
@@ -26,6 +27,7 @@ __all__ = [
     "CaseSummary",
     "CasesIndex",
     "Citation",
+    "ContentVersion",
     "FetchResult",
     "FileCache",
     "OyezCasesTraverser",

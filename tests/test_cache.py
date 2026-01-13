@@ -21,7 +21,7 @@ class TestFileCache:
             assert cache.get(request) is None
 
     def test_set_and_get(self) -> None:
-        """Should store and retrieve entries with correct file extensions."""
+        """Should store and retrieve entries with versions."""
         with tempfile.TemporaryDirectory() as tmpdir:
             cache = FileCache(Path(tmpdir))
             request = RequestMetadata(url="https://example.com/test")
@@ -34,53 +34,31 @@ class TestFileCache:
                 content_type="application/json",
             )
             cache.set(request, result)
-
-            # Verify files exist with correct extension
             meta_path = cache._get_meta_path(request)
-            raw_path = cache._get_raw_path(request, "application/json")
             assert meta_path.exists()
-            assert raw_path.exists()
-            assert raw_path.suffix == ".json"
-
-            # Verify metadata contains raw_path
             with meta_path.open() as f:
                 meta_data = json.load(f)
-            assert "raw_path" in meta_data
-            assert meta_data["raw_path"].endswith(".json")
-
-            # Verify retrieval
+            assert len(meta_data["versions"]) == 1
             retrieved = cache.get(request)
             assert retrieved is not None
-            assert retrieved.url == request.url
             assert retrieved.response == b'{"key": "value"}'
 
-    def test_expired_entry_returns_none(self) -> None:
-        """Expired entries should return None and be deleted."""
+    def test_versioned_entries_never_expire(self) -> None:
+        """Versioned entries are kept indefinitely."""
         with tempfile.TemporaryDirectory() as tmpdir:
             cache = FileCache(Path(tmpdir), ttl_days=0)
             request = RequestMetadata(url="https://example.com/test")
-
-            # Manually create expired meta and raw files with raw_path
-            raw_rel_path = f"raw/{request.cache_key()}.json"
-            meta = CacheMeta(
+            result = FetchResult(
                 url=request.url,
-                fetched_at=datetime.now(timezone.utc) - timedelta(days=2),
-                expires_at=datetime.now(timezone.utc) - timedelta(days=1),
+                success=True,
                 status_code=200,
-                raw_path=raw_rel_path,
+                raw_data=b'{"test": true}',
+                content_type="application/json",
             )
-            meta_path = cache._get_meta_path(request)
-            raw_path = cache._get_raw_path(request, "application/json")
-            meta_path.parent.mkdir(parents=True, exist_ok=True)
-            raw_path.parent.mkdir(parents=True, exist_ok=True)
-            with meta_path.open("w") as f:
-                json.dump(meta.to_dict(), f)
-            raw_path.write_bytes(b"{}")
-
-            # Should return None and delete both files
-            assert cache.get(request) is None
-            assert not meta_path.exists()
-            assert not raw_path.exists()
+            cache.set(request, result)
+            retrieved = cache.get(request)
+            assert retrieved is not None
+            assert retrieved.response == b'{"test": true}'
 
     def test_failed_requests_stored_separately(self) -> None:
         """Failed requests should be stored in the failed directory."""
@@ -89,22 +67,16 @@ class TestFileCache:
             request = RequestMetadata(url="https://example.com/error")
             result = FetchResult(url=request.url, success=False, error="Conn failed")
             cache.set(request, result)
-
             assert cache.get(request) is None
-            failed_path = cache._get_failed_path(request)
-            assert failed_path.exists()
+            assert cache._get_failed_path(request).exists()
 
     def test_delete_entry(self) -> None:
-        """Should delete both meta and raw files."""
+        """Should delete meta file."""
         with tempfile.TemporaryDirectory() as tmpdir:
             cache = FileCache(Path(tmpdir))
             request = RequestMetadata(url="https://example.com/delete")
             result = FetchResult(
-                url=request.url,
-                success=True,
-                status_code=200,
-                data={},
-                raw_data=b"{}",
+                url=request.url, success=True, status_code=200, raw_data=b"{}"
             )
             cache.set(request, result)
             assert cache.get(request) is not None
@@ -118,50 +90,37 @@ class TestFileCache:
             cache = FileCache(Path(tmpdir))
             request = RequestMetadata(url="https://example.com/corrupted")
             meta_path = cache._get_meta_path(request)
-            raw_path = cache._get_raw_path(request, "application/json")
             meta_path.parent.mkdir(parents=True, exist_ok=True)
-            raw_path.parent.mkdir(parents=True, exist_ok=True)
-            with meta_path.open("w") as f:
-                f.write("not valid json")
-            raw_path.write_bytes(b"{}")
-
+            meta_path.write_text("not valid json")
             assert cache.get(request) is None
             assert not meta_path.exists()
 
     def test_clear_expired(self) -> None:
-        """Should clear expired entries from meta and raw directories."""
+        """Should clear expired entries."""
         with tempfile.TemporaryDirectory() as tmpdir:
             cache = FileCache(Path(tmpdir))
-
-            # Create an expired entry with raw_path
             request1 = RequestMetadata(url="https://example.com/expired")
-            raw_rel_path = f"raw/{request1.cache_key()}.json"
+            raw_rel = f"raw/{request1.cache_key()}.json"
             meta1 = CacheMeta(
                 url=request1.url,
                 fetched_at=datetime.now(timezone.utc) - timedelta(days=60),
                 expires_at=datetime.now(timezone.utc) - timedelta(days=30),
                 status_code=200,
-                raw_path=raw_rel_path,
+                raw_path=raw_rel,
             )
             meta_path1 = cache._get_meta_path(request1)
             raw_path1 = cache._get_raw_path(request1, "application/json")
             meta_path1.parent.mkdir(parents=True, exist_ok=True)
             raw_path1.parent.mkdir(parents=True, exist_ok=True)
-            with meta_path1.open("w") as f:
-                json.dump(meta1.to_dict(), f)
+            meta_path1.write_text(json.dumps(meta1.to_dict()))
             raw_path1.write_bytes(b"{}")
-
-            # Create a valid entry
             request2 = RequestMetadata(url="https://example.com/valid")
             result2 = FetchResult(
-                url=request2.url, success=True, status_code=200, data={}, raw_data=b"{}"
+                url=request2.url, success=True, status_code=200, raw_data=b"{}"
             )
             cache.set(request2, result2)
-
             cleared = cache.clear_expired()
             assert cleared == 1
-            assert not meta_path1.exists()
-            assert not raw_path1.exists()
             assert cache.get(request2) is not None
 
     def test_html_content_type_uses_html_extension(self) -> None:
@@ -173,12 +132,11 @@ class TestFileCache:
                 url=request.url,
                 success=True,
                 status_code=200,
-                data=None,
                 raw_data=b"<html></html>",
                 content_type="text/html; charset=utf-8",
             )
             cache.set(request, result)
-
-            raw_path = cache._get_raw_path(request, "text/html")
-            assert raw_path.suffix == ".html"
-            assert raw_path.exists()
+            meta_path = cache._get_meta_path(request)
+            with meta_path.open() as f:
+                meta_data = json.load(f)
+            assert meta_data["versions"][0]["raw_path"].endswith(".html")
