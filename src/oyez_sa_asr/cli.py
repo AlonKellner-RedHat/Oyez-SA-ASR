@@ -93,7 +93,7 @@ def scrape_cases(
     parallelism: Annotated[
         int,
         typer.Option("--parallelism", "-p", help="Max concurrent requests"),
-    ] = 50,
+    ] = 200,
 ) -> None:
     """Scrape detailed case information from the Oyez API."""
     # Check if index file exists
@@ -133,7 +133,9 @@ def scrape_cases(
     # Create tqdm progress bar
     pbar = tqdm(total=len(requests), desc="Fetching", unit="case", dynamic_ncols=True)
 
-    def on_progress(completed: int, total: int, result: FetchResult) -> None:
+    def on_progress(
+        completed: int, total: int, result: FetchResult, concurrent: int
+    ) -> None:
         """Update progress as each request completes."""
         del completed, total  # Unused - tqdm handles progress display
         if result.from_cache:
@@ -145,7 +147,10 @@ def scrape_cases(
 
         pbar.update(1)
         pbar.set_postfix(
-            cached=stats["cached"], new=stats["new"], failed=stats["failed"]
+            concurrent=concurrent,
+            cached=stats["cached"],
+            new=stats["new"],
+            failed=stats["failed"],
         )
 
     async def run_fetch() -> list[FetchResult]:

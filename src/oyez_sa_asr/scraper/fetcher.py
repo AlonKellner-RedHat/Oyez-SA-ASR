@@ -11,8 +11,8 @@ import httpx
 from .cache import FileCache
 from .models import FetchResult, RequestMetadata
 
-# Type alias for progress callback: (completed, total, result) -> None
-ProgressCallback = Callable[[int, int, FetchResult], None]
+# Type alias for progress callback: (completed, total, result, concurrent) -> None
+ProgressCallback = Callable[[int, int, FetchResult, int], None]
 
 
 class AdaptiveFetcher:
@@ -221,7 +221,7 @@ class AdaptiveFetcher:
         Args:
             requests: The requests to fetch.
             on_progress: Callback called after each request completes.
-                         Signature: (completed, total, result) -> None
+                         Signature: (completed, total, result, concurrent) -> None
 
         Returns
         -------
@@ -233,6 +233,7 @@ class AdaptiveFetcher:
         total = len(requests)
         results: list[FetchResult | None] = [None] * total
         completed = 0
+        concurrent = 0
 
         # Use max_parallelism directly for true parallelism
         semaphore = asyncio.Semaphore(self.max_parallelism)
@@ -240,13 +241,16 @@ class AdaptiveFetcher:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
 
             async def fetch_with_index(idx: int, req: RequestMetadata) -> None:
-                nonlocal completed
+                nonlocal completed, concurrent
                 async with semaphore:
+                    concurrent += 1
                     result = await self._fetch_one(client, req)
                     results[idx] = result
                     completed += 1
+                    current_concurrent = concurrent
+                    concurrent -= 1
                     if on_progress:
-                        on_progress(completed, total, result)
+                        on_progress(completed, total, result, current_concurrent)
 
             tasks = [fetch_with_index(i, req) for i, req in enumerate(requests)]
             await asyncio.gather(*tasks)

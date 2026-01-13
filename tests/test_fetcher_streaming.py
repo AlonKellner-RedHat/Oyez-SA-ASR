@@ -32,10 +32,12 @@ class TestFetchBatchStreaming:
             mock_response.json.return_value = {"test": True}
             mock_response.raise_for_status = MagicMock()
 
-            progress_calls: list[tuple[int, int, FetchResult]] = []
+            progress_calls: list[tuple[int, int, FetchResult, int]] = []
 
-            def on_progress(completed: int, total: int, result: FetchResult) -> None:
-                progress_calls.append((completed, total, result))
+            def on_progress(
+                completed: int, total: int, result: FetchResult, concurrent: int
+            ) -> None:
+                progress_calls.append((completed, total, result, concurrent))
 
             with patch.object(
                 httpx.AsyncClient,
