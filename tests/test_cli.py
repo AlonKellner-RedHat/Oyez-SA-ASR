@@ -103,7 +103,7 @@ class TestScrapeCases:
 
             with patch("oyez_sa_asr.cli.AdaptiveFetcher") as mock_fetcher_cls:
                 mock_fetcher = mock_fetcher_cls.create.return_value
-                mock_fetcher.fetch_batch = AsyncMock(return_value=[])
+                mock_fetcher.fetch_batch_streaming = AsyncMock(return_value=[])
 
                 result = runner.invoke(
                     app,
@@ -118,9 +118,9 @@ class TestScrapeCases:
                 )
 
                 assert result.exit_code == 0
-                # Should have called fetch_batch with 2 requests
-                mock_fetcher.fetch_batch.assert_called_once()
-                call_args = mock_fetcher.fetch_batch.call_args[0][0]
+                # Should have called fetch_batch_streaming with 2 requests
+                mock_fetcher.fetch_batch_streaming.assert_called_once()
+                call_args = mock_fetcher.fetch_batch_streaming.call_args[0][0]
                 assert len(call_args) == 2
 
 

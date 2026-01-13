@@ -9,7 +9,7 @@ import httpx
 import pytest
 
 from oyez_sa_asr.scraper import AdaptiveFetcher, RequestMetadata
-from oyez_sa_asr.scraper.models import FetchResult
+from oyez_sa_asr.scraper.models import FetchResult  # Used by cache.set
 
 
 class TestAdaptiveFetcher:

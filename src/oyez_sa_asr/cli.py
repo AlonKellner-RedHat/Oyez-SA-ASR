@@ -12,6 +12,7 @@ from rich.console import Console
 from ._example import example
 from .scraper import (
     AdaptiveFetcher,
+    FetchResult,
     OyezCasesTraverser,
     RequestMetadata,
     parse_cached_cases,
@@ -20,7 +21,7 @@ from .scraper import (
 app = typer.Typer()
 scrape_app = typer.Typer(help="Scrape data from Oyez API")
 process_app = typer.Typer(help="Process cached data into structured files")
-console = Console()
+console = Console(force_terminal=True)
 
 app.add_typer(scrape_app, name="scrape")
 app.add_typer(process_app, name="process")
@@ -67,6 +68,7 @@ def scrape_index(
     fetcher = AdaptiveFetcher.create(cache_dir, ttl_days=ttl_days)
     traverser = OyezCasesTraverser(fetcher, per_page=per_page, max_pages=max_pages)
 
+    # Traverser already prints progress per page
     cases = asyncio.run(traverser.fetch_all())
 
     console.print()
@@ -114,14 +116,42 @@ def scrape_cases(
     # Create requests for all case hrefs
     requests = [RequestMetadata(url=href) for href in hrefs]
 
-    # Fetch all in parallel (throttled by AdaptiveFetcher)
+    # Fetch all requests with streaming progress
     fetcher = AdaptiveFetcher.create(cache_dir, ttl_days=ttl_days)
-    results = asyncio.run(fetcher.fetch_batch(requests))
+
+    # Stats tracking
+    stats = {"cached": 0, "new": 0, "failed": 0, "completed": 0}
+    len(requests)
+
+    def on_progress(completed: int, total: int, result: FetchResult) -> None:
+        """Update progress as each request completes."""
+        if result.from_cache:
+            stats["cached"] += 1
+        elif result.success:
+            stats["new"] += 1
+        else:
+            stats["failed"] += 1
+        stats["completed"] = completed
+
+        # Print progress every 500 requests or at the end
+        if completed % 500 == 0 or completed == total:
+            pct = (completed * 100) // total
+            console.print(
+                f"  [{pct:3d}%] {completed}/{total} - "
+                f"cached: {stats['cached']}, new: {stats['new']}, failed: {stats['failed']}"
+            )
+
+    async def run_fetch() -> list[FetchResult]:
+        return await fetcher.fetch_batch_streaming(requests, on_progress)
+
+    console.print()  # Newline before progress
+    all_results = asyncio.run(run_fetch())
+    console.print()  # Newline after progress
 
     # Report results
-    cached = sum(1 for r in results if r.from_cache)
-    new_fetches = sum(1 for r in results if r.success and not r.from_cache)
-    failures = sum(1 for r in results if not r.success)
+    cached = sum(1 for r in all_results if r.from_cache)
+    new_fetches = sum(1 for r in all_results if r.success and not r.from_cache)
+    failures = sum(1 for r in all_results if not r.success)
 
     console.print()
     console.print("[bold green]Done![/bold green]")
