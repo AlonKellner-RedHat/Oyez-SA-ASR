@@ -3,6 +3,7 @@
 
 import asyncio
 import json
+import random
 import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -164,7 +165,10 @@ class AdaptiveFetcher:
         if not requests:
             return []
 
-        results, pending = self._partition_cached(requests, on_progress)
+        # Shuffle requests to distribute load and avoid sequential patterns
+        shuffled = list(requests)
+        random.shuffle(shuffled)
+        results, pending = self._partition_cached(shuffled, on_progress)
         if not pending:
             return results
 
