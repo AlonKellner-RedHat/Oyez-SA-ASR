@@ -9,7 +9,7 @@ import typer
 from rich.console import Console
 
 from ._example import example
-from .scraper import AdaptiveFetcher, OyezCasesTraverser
+from .scraper import AdaptiveFetcher, OyezCasesTraverser, parse_cached_cases
 
 app = typer.Typer()
 console = Console()
@@ -57,6 +57,36 @@ def scrape_cases(
 
     console.print()
     console.print(f"[bold green]Done![/bold green] Fetched {len(cases)} cases total.")
+
+
+@app.command()
+def parse_cases_index(
+    cache_dir: Annotated[
+        Path,
+        typer.Option("--cache-dir", "-c", help="Directory with cached responses"),
+    ] = Path(".cache"),
+    output: Annotated[
+        Path,
+        typer.Option("--output", "-o", help="Output JSON file path"),
+    ] = Path("data/cases_index.json"),
+) -> None:
+    """Parse cached cases into a structured index file."""
+    console.print("[bold]Parsing cached cases[/bold]")
+    console.print(f"  Cache dir: {cache_dir}")
+    console.print(f"  Output: {output}")
+    console.print()
+
+    index = parse_cached_cases(cache_dir)
+
+    if index.total_cases == 0:
+        console.print("[yellow]Warning:[/yellow] No cached cases found.")
+        console.print("Run 'scrape-cases' first to fetch cases from the API.")
+        return
+
+    index.save(output)
+
+    console.print(f"[bold green]Done![/bold green] Parsed {index.total_cases} cases.")
+    console.print(f"Index saved to: {output}")
 
 
 if __name__ == "__main__":
