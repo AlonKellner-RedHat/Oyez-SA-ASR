@@ -1,5 +1,5 @@
 # Edited by Claude
-"""Unit tests for AdaptiveFetcher streaming functionality."""
+"""Unit tests for AdaptiveFetcher adaptive streaming functionality."""
 
 import tempfile
 from pathlib import Path
@@ -11,76 +11,178 @@ import pytest
 from oyez_sa_asr.scraper import AdaptiveFetcher, RequestMetadata
 from oyez_sa_asr.scraper.models import FetchResult
 
+TEST_URL = "https://test.example.com/api"
 
-class TestFetchBatchStreaming:
-    """Tests for fetch_batch_streaming method."""
 
-    @pytest.mark.asyncio
-    async def test_calls_progress_callback(self) -> None:
-        """Should call progress callback for each completed request."""
+def _make_mock_response() -> MagicMock:
+    """Create a mock successful HTTP response."""
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.content = b'{"ok": true}'
+    resp.headers = {"content-type": "application/json"}
+    resp.json.return_value = {"ok": True}
+    resp.raise_for_status = MagicMock()
+    return resp
+
+
+class TestIsTransientFailure:
+    """Tests for _is_transient_failure method."""
+
+    def test_success_not_transient(self) -> None:
+        """Success results are not transient."""
         with tempfile.TemporaryDirectory() as tmpdir:
             fetcher = AdaptiveFetcher.create(Path(tmpdir))
-            requests = [
-                RequestMetadata(url="https://example.com/1"),
-                RequestMetadata(url="https://example.com/2"),
-            ]
+            result = FetchResult(url=TEST_URL, success=True, status_code=200)
+            assert fetcher._is_transient_failure(result) is False
 
-            mock_response = MagicMock()
-            mock_response.status_code = 200
-            mock_response.content = b'{"test": true}'
-            mock_response.headers = {"content-type": "application/json"}
-            mock_response.json.return_value = {"test": True}
-            mock_response.raise_for_status = MagicMock()
+    def test_connection_error_transient(self) -> None:
+        """Connection errors are transient."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fetcher = AdaptiveFetcher.create(Path(tmpdir))
+            result = FetchResult(url=TEST_URL, success=False, error="timeout")
+            assert fetcher._is_transient_failure(result) is True
 
-            progress_calls: list[tuple[int, int, FetchResult, int]] = []
+    def test_transient_status_codes(self) -> None:
+        """429, 502, 503, 504 are transient."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fetcher = AdaptiveFetcher.create(Path(tmpdir))
+            for code in [429, 502, 503, 504]:
+                result = FetchResult(url=TEST_URL, success=False, status_code=code)
+                assert fetcher._is_transient_failure(result) is True
 
-            def on_progress(
-                completed: int, total: int, result: FetchResult, concurrent: int
-            ) -> None:
-                progress_calls.append((completed, total, result, concurrent))
+    def test_permanent_status_codes(self) -> None:
+        """400, 401, 403, 404 are permanent."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fetcher = AdaptiveFetcher.create(Path(tmpdir))
+            for code in [400, 401, 403, 404]:
+                result = FetchResult(url=TEST_URL, success=False, status_code=code)
+                assert fetcher._is_transient_failure(result) is False
 
-            with patch.object(
-                httpx.AsyncClient,
-                "request",
-                new_callable=AsyncMock,
-                return_value=mock_response,
-            ):
-                results = await fetcher.fetch_batch_streaming(requests, on_progress)
 
-            assert len(results) == 2
-            assert len(progress_calls) == 2
-            assert progress_calls[-1][0] == 2
-            assert progress_calls[-1][1] == 2
+class TestFetchBatchAdaptive:
+    """Tests for fetch_batch_adaptive method."""
 
     @pytest.mark.asyncio
     async def test_empty_list(self) -> None:
-        """Should handle empty request list."""
+        """Empty list returns empty results."""
         with tempfile.TemporaryDirectory() as tmpdir:
             fetcher = AdaptiveFetcher.create(Path(tmpdir))
-            results = await fetcher.fetch_batch_streaming([])
-            assert results == []
+            assert await fetcher.fetch_batch_adaptive([]) == []
 
     @pytest.mark.asyncio
-    async def test_without_callback(self) -> None:
-        """Should work without progress callback."""
+    async def test_doubles_parallelism(self) -> None:
+        """Doubles parallelism after each successful wave."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            fetcher = AdaptiveFetcher.create(Path(tmpdir))
-            requests = [RequestMetadata(url="https://example.com/1")]
+            fetcher = AdaptiveFetcher.create(Path(tmpdir), max_parallelism=64)
+            requests = [RequestMetadata(url=f"{TEST_URL}/{i}") for i in range(7)]
+            parallelism_values: list[int] = []
 
-            mock_response = MagicMock()
-            mock_response.status_code = 200
-            mock_response.content = b'{"ok": true}'
-            mock_response.headers = {"content-type": "application/json"}
-            mock_response.json.return_value = {"ok": True}
-            mock_response.raise_for_status = MagicMock()
+            def on_progress(_c: int, _t: int, _r: FetchResult, p: int) -> None:
+                parallelism_values.append(p)
 
             with patch.object(
                 httpx.AsyncClient,
                 "request",
                 new_callable=AsyncMock,
-                return_value=mock_response,
+                return_value=_make_mock_response(),
             ):
-                results = await fetcher.fetch_batch_streaming(requests)
+                results = await fetcher.fetch_batch_adaptive(requests, on_progress)
+
+            assert len(results) == 7
+            assert parallelism_values == [2, 4, 4, 8, 8, 8, 8]
+
+    @pytest.mark.asyncio
+    async def test_halves_on_failure(self) -> None:
+        """Halves parallelism when transient failure occurs."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fetcher = AdaptiveFetcher.create(Path(tmpdir), max_parallelism=64)
+            requests = [RequestMetadata(url=f"{TEST_URL}/{i}") for i in range(10)]
+            call_count = 0
+
+            async def mock_request(*_args: object, **_kwargs: object) -> MagicMock:
+                nonlocal call_count
+                call_count += 1
+                if call_count == 4:
+                    raise httpx.RequestError("timeout")
+                return _make_mock_response()
+
+            parallelism_values: list[int] = []
+
+            def on_progress(_c: int, _t: int, _r: FetchResult, p: int) -> None:
+                parallelism_values.append(p)
+
+            with patch.object(
+                httpx.AsyncClient,
+                "request",
+                new_callable=AsyncMock,
+                side_effect=mock_request,
+            ):
+                results = await fetcher.fetch_batch_adaptive(requests, on_progress)
+
+            assert len(results) == 10
+            assert 2 in parallelism_values
+
+    @pytest.mark.asyncio
+    async def test_retries_transient(self) -> None:
+        """Retries requests that fail with transient errors."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fetcher = AdaptiveFetcher.create(Path(tmpdir), max_parallelism=64)
+            requests = [RequestMetadata(url=f"{TEST_URL}/1")]
+            attempt = 0
+
+            async def mock_request(*_args: object, **_kwargs: object) -> MagicMock:
+                nonlocal attempt
+                attempt += 1
+                if attempt == 1:
+                    raise httpx.RequestError("timeout")
+                return _make_mock_response()
+
+            with patch.object(
+                httpx.AsyncClient,
+                "request",
+                new_callable=AsyncMock,
+                side_effect=mock_request,
+            ):
+                results = await fetcher.fetch_batch_adaptive(requests)
 
             assert len(results) == 1
-            assert results[0].success is True
+            assert results[0].success
+            assert attempt == 2
+
+    @pytest.mark.asyncio
+    async def test_respects_max(self) -> None:
+        """Does not exceed max_parallelism."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fetcher = AdaptiveFetcher.create(Path(tmpdir), max_parallelism=4)
+            requests = [RequestMetadata(url=f"{TEST_URL}/{i}") for i in range(20)]
+            max_seen = 0
+
+            def on_progress(_c: int, _t: int, _r: FetchResult, p: int) -> None:
+                nonlocal max_seen
+                max_seen = max(max_seen, p)
+
+            with patch.object(
+                httpx.AsyncClient,
+                "request",
+                new_callable=AsyncMock,
+                return_value=_make_mock_response(),
+            ):
+                await fetcher.fetch_batch_adaptive(requests, on_progress)
+
+            assert max_seen <= 8
+
+    @pytest.mark.asyncio
+    async def test_no_callback(self) -> None:
+        """Works without progress callback."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fetcher = AdaptiveFetcher.create(Path(tmpdir))
+            requests = [RequestMetadata(url=f"{TEST_URL}/1")]
+            with patch.object(
+                httpx.AsyncClient,
+                "request",
+                new_callable=AsyncMock,
+                return_value=_make_mock_response(),
+            ):
+                results = await fetcher.fetch_batch_adaptive(requests)
+            assert len(results) == 1
+            assert results[0].success

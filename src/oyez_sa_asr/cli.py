@@ -90,23 +90,27 @@ def scrape_cases(
         int,
         typer.Option("--ttl-days", "-t", help="Cache TTL in days"),
     ] = 30,
-    parallelism: Annotated[
+    max_parallelism: Annotated[
         int,
-        typer.Option("--parallelism", "-p", help="Max concurrent requests"),
-    ] = 200,
+        typer.Option("--max-parallelism", "-p", help="Maximum parallel requests"),
+    ] = 1024,
 ) -> None:
-    """Scrape detailed case information from the Oyez API."""
+    """Scrape detailed case information from the Oyez API.
+
+    Uses adaptive parallelism: starts at 1, doubles on success, halves on failure.
+    Automatically discovers the optimal parallelism for the API.
+    """
     # Check if index file exists
     if not index_file.exists():
         console.print(f"[red]Error:[/red] Index file not found: {index_file}")
         console.print("Run 'process index' first to generate the index.")
         raise typer.Exit(1)
 
-    console.print("[bold]Scraping Oyez case details[/bold]")
+    console.print("[bold]Scraping Oyez case details (adaptive parallelism)[/bold]")
     console.print(f"  Index file: {index_file}")
     console.print(f"  Cache dir: {cache_dir}")
     console.print(f"  Cache TTL: {ttl_days} days")
-    console.print(f"  Parallelism: {parallelism}")
+    console.print(f"  Max parallelism: {max_parallelism}")
     console.print()
 
     # Load index and extract hrefs
@@ -122,22 +126,23 @@ def scrape_cases(
     # Create requests for all case hrefs
     requests = [RequestMetadata(url=href) for href in hrefs]
 
-    # Fetch all requests with streaming progress
+    # Fetch with adaptive parallelism
     fetcher = AdaptiveFetcher.create(
-        cache_dir, ttl_days=ttl_days, max_parallelism=parallelism
+        cache_dir, ttl_days=ttl_days, max_parallelism=max_parallelism
     )
 
     # Stats tracking
-    stats = {"cached": 0, "new": 0, "failed": 0}
+    stats = {"cached": 0, "new": 0, "failed": 0, "last_wave_size": 0}
 
     # Create tqdm progress bar
     pbar = tqdm(total=len(requests), desc="Fetching", unit="case", dynamic_ncols=True)
 
     def on_progress(
-        completed: int, total: int, result: FetchResult, concurrent: int
+        completed: int, total: int, result: FetchResult, parallelism: int
     ) -> None:
-        """Update progress as each request completes."""
-        del completed, total  # Unused - tqdm handles progress display
+        """Update progress after each wave completes."""
+        del total  # Unused - tqdm handles progress display
+        # Count results from this wave
         if result.from_cache:
             stats["cached"] += 1
         elif result.success:
@@ -145,16 +150,18 @@ def scrape_cases(
         else:
             stats["failed"] += 1
 
-        pbar.update(1)
+        # Update progress bar to completed count
+        pbar.n = completed
         pbar.set_postfix(
-            concurrent=concurrent,
+            parallelism=parallelism,
             cached=stats["cached"],
             new=stats["new"],
             failed=stats["failed"],
         )
+        pbar.refresh()
 
     async def run_fetch() -> list[FetchResult]:
-        return await fetcher.fetch_batch_streaming(requests, on_progress)
+        return await fetcher.fetch_batch_adaptive(requests, on_progress)
 
     all_results = asyncio.run(run_fetch())
     pbar.close()
