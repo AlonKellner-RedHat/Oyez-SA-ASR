@@ -8,6 +8,7 @@ from typing import Annotated
 
 import typer
 from rich.console import Console
+from tqdm import tqdm
 
 from ._example import example
 from .scraper import (
@@ -120,33 +121,31 @@ def scrape_cases(
     fetcher = AdaptiveFetcher.create(cache_dir, ttl_days=ttl_days)
 
     # Stats tracking
-    stats = {"cached": 0, "new": 0, "failed": 0, "completed": 0}
-    len(requests)
+    stats = {"cached": 0, "new": 0, "failed": 0}
+
+    # Create tqdm progress bar
+    pbar = tqdm(total=len(requests), desc="Fetching", unit="case", dynamic_ncols=True)
 
     def on_progress(completed: int, total: int, result: FetchResult) -> None:
         """Update progress as each request completes."""
+        del completed, total  # Unused - tqdm handles progress display
         if result.from_cache:
             stats["cached"] += 1
         elif result.success:
             stats["new"] += 1
         else:
             stats["failed"] += 1
-        stats["completed"] = completed
 
-        # Print progress every 500 requests or at the end
-        if completed % 500 == 0 or completed == total:
-            pct = (completed * 100) // total
-            console.print(
-                f"  [{pct:3d}%] {completed}/{total} - "
-                f"cached: {stats['cached']}, new: {stats['new']}, failed: {stats['failed']}"
-            )
+        pbar.update(1)
+        pbar.set_postfix(
+            cached=stats["cached"], new=stats["new"], failed=stats["failed"]
+        )
 
     async def run_fetch() -> list[FetchResult]:
         return await fetcher.fetch_batch_streaming(requests, on_progress)
 
-    console.print()  # Newline before progress
     all_results = asyncio.run(run_fetch())
-    console.print()  # Newline after progress
+    pbar.close()
 
     # Report results
     cached = sum(1 for r in all_results if r.from_cache)

@@ -25,6 +25,7 @@ colorama==0.4.6 ; sys_platform == 'win32' \
     # via
     #   click
     #   pytest
+    #   tqdm
 coverage==7.13.1 \
     --hash=sha256:0403f647055de2609be776965108447deb8e384fe4a553c119e3ff6bfbab4784 \
     --hash=sha256:0642eae483cc8c2902e4af7298bf886d605e80f26382124cddc3967c2a3df09e \
@@ -242,6 +243,10 @@ tomli==2.4.0 ; python_full_version <= '3.11' \
     # via
     #   coverage
     #   pytest
+tqdm==4.67.1 \
+    --hash=sha256:26445eca388f82e72884e0d580d5464cd801a3ea01e63e5601bdff9ba6a48de2 \
+    --hash=sha256:f8aef9c52c08c13a65f30ea34f4e5aac3fd1a34959879d7e59e63027286627f2
+    # via oyez-sa-asr
 typer==0.21.1 \
     --hash=sha256:7985e89081c636b88d172c2ee0cfe33c253160994d47bdfdc302defd7d1f1d01 \
     --hash=sha256:ea835607cd752343b6b2b7ce676893e5a0324082268b48f27aa058bdb7d2145d

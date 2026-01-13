@@ -27,7 +27,7 @@ classifiers = [
 ]
 
 dynamic = [ "version" ]
-dependencies = [ "httpx", "typer" ]
+dependencies = [ "httpx", "tqdm", "typer" ]
 
 urls = { Homepage = "https://github.com/AlonKellner/oyez_sa_asr.git", Repository = "https://github.com/AlonKellner/oyez_sa_asr.git", Bugs = "https://github.com/AlonKellner/oyez_sa_asr/issues", Changelog = "https://github.com/AlonKellner/oyez_sa_asr/blob/main/CHANGELOG.md" }
 
