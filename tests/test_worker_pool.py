@@ -148,31 +148,6 @@ class TestWorkerPool:
                 await pool.shutdown_all()
 
     @pytest.mark.asyncio
-    async def test_shutdown_half(self) -> None:
-        """WorkerPool should shutdown half of workers."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            fetcher = AdaptiveFetcher.create(Path(tmpdir))
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                pool = WorkerPool(fetcher, client)
-                pool.spawn_workers(4)
-                assert pool.worker_count == 4
-                await pool.shutdown_half()
-                assert pool.worker_count == 2
-                await pool.shutdown_all()
-
-    @pytest.mark.asyncio
-    async def test_shutdown_half_minimum_one(self) -> None:
-        """shutdown_half should keep at least 1 worker."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            fetcher = AdaptiveFetcher.create(Path(tmpdir))
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                pool = WorkerPool(fetcher, client)
-                pool.spawn_workers(1)
-                await pool.shutdown_half()
-                assert pool.worker_count == 1
-                await pool.shutdown_all()
-
-    @pytest.mark.asyncio
     async def test_workers_process_requests(self) -> None:
         """Workers in pool should process requests from queue."""
         with tempfile.TemporaryDirectory() as tmpdir:

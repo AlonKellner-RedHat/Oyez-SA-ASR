@@ -1,8 +1,8 @@
 # Edited by Claude
 """Tests for worker pool scaling logic and integration."""
 
-import asyncio
 import tempfile
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -27,20 +27,49 @@ def _make_mock_response(content: bytes = b'{"ok": true}') -> MagicMock:
     return resp
 
 
-class TestScaleUp:
-    """Tests for scale-up trigger logic."""
+class TestRateBasedScaling:
+    """Tests for rate-based scaling logic."""
 
     @pytest.mark.asyncio
-    async def test_scale_up_when_all_workers_succeeded(self) -> None:
-        """Should trigger scale-up when all workers have at least one success."""
+    async def test_scale_up_when_rate_improves_50_percent(self) -> None:
+        """Should scale up when throughput improves by more than 50%."""
         with tempfile.TemporaryDirectory() as tmpdir:
             fetcher = AdaptiveFetcher.create(Path(tmpdir), max_parallelism=16)
 
             async with httpx.AsyncClient(timeout=30.0) as client:
-                pool = WorkerPool(fetcher, client, max_workers=16)
-                pool.spawn_workers(2)
+                pool = WorkerPool(fetcher, client, max_workers=16, min_samples=2)
+                pool.spawn_workers(1)
                 initial_count = pool.worker_count
 
+                # Simulate first rate window: 2 requests in 1 second = 2 req/s
+                pool._rate_window_start = time.monotonic() - 1.0
+                pool.record_result(
+                    0, FetchResult(url=TEST_URL, success=True, status_code=200)
+                )
+                pool.record_result(
+                    0, FetchResult(url=TEST_URL, success=True, status_code=200)
+                )
+
+                await pool.check_scaling()
+                # First scale-up should happen (no previous rate to compare)
+                assert pool.worker_count > initial_count
+                await pool.shutdown_all()
+
+    @pytest.mark.asyncio
+    async def test_no_scale_up_when_rate_improves_less_than_50_percent(self) -> None:
+        """Should lock scaling when improvement is less than 50%."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fetcher = AdaptiveFetcher.create(Path(tmpdir), max_parallelism=16)
+
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                pool = WorkerPool(fetcher, client, max_workers=16, min_samples=2)
+                pool.spawn_workers(2)
+
+                # Set a previous rate of 10 req/s
+                pool._last_rate = 10.0
+
+                # Simulate current window: 2 requests in 0.2s = 10 req/s (0% improvement)
+                pool._rate_window_start = time.monotonic() - 0.2
                 pool.record_result(
                     0, FetchResult(url=TEST_URL, success=True, status_code=200)
                 )
@@ -48,105 +77,89 @@ class TestScaleUp:
                     1, FetchResult(url=TEST_URL, success=True, status_code=200)
                 )
 
+                count_before = pool.worker_count
                 await pool.check_scaling()
-                assert pool.worker_count > initial_count
+
+                # Should not scale up (no improvement)
+                assert pool.worker_count == count_before
+                assert pool._scaling_locked is True
                 await pool.shutdown_all()
 
     @pytest.mark.asyncio
-    async def test_no_scale_up_before_all_succeeded(self) -> None:
-        """Should not scale up until all workers have succeeded."""
+    async def test_scaling_locked_persists(self) -> None:
+        """Once scaling is locked, no more scaling attempts should occur."""
         with tempfile.TemporaryDirectory() as tmpdir:
             fetcher = AdaptiveFetcher.create(Path(tmpdir), max_parallelism=16)
 
-            with patch.object(
-                httpx.AsyncClient,
-                "request",
-                new_callable=AsyncMock,
-                return_value=_make_mock_response(),
-            ):
-                async with httpx.AsyncClient(timeout=30.0) as client:
-                    pool = WorkerPool(fetcher, client, max_workers=16)
-                    pool.spawn_workers(2)
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                pool = WorkerPool(fetcher, client, max_workers=16, min_samples=2)
+                pool.spawn_workers(2)
+                pool._scaling_locked = True  # Pre-lock scaling
 
-                    await pool.add_request(RequestMetadata(url=f"{TEST_URL}/0"))
-                    await asyncio.wait_for(pool.get_result(), timeout=2.0)
-                    await pool.check_scaling()
+                # Even with good conditions, should not scale
+                pool._rate_window_start = time.monotonic() - 0.1
+                for _ in range(10):
+                    pool.record_result(
+                        0, FetchResult(url=TEST_URL, success=True, status_code=200)
+                    )
 
-                    assert pool.worker_count == 2
-                    await pool.shutdown_all()
+                count_before = pool.worker_count
+                await pool.check_scaling()
 
-
-class TestScaleDown:
-    """Tests for scale-down trigger logic."""
+                assert pool.worker_count == count_before
+                await pool.shutdown_all()
 
     @pytest.mark.asyncio
-    async def test_scale_down_on_failure(self) -> None:
-        """Should scale down when a failure occurs."""
+    async def test_errors_do_not_trigger_scale_down(self) -> None:
+        """Errors should not trigger scale-down, only retries handle them."""
         with tempfile.TemporaryDirectory() as tmpdir:
             fetcher = AdaptiveFetcher.create(
                 Path(tmpdir), max_parallelism=16, max_retries=0
             )
 
-            mock_response = MagicMock()
-            mock_response.status_code = 404
-            error = httpx.HTTPStatusError(
-                "Not Found", request=MagicMock(), response=mock_response
-            )
-            call_count = 0
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                pool = WorkerPool(fetcher, client, max_workers=16, min_samples=10)
+                pool.spawn_workers(4)
+                initial_count = pool.worker_count
 
-            async def mock_request(*_args: object, **_kwargs: object) -> MagicMock:
-                nonlocal call_count
-                call_count += 1
-                if call_count == 2:
-                    raise error
-                return _make_mock_response()
+                # Record failures - less than min_samples so no scaling happens
+                for i in range(4):
+                    pool.record_result(
+                        i, FetchResult(url=TEST_URL, success=False, status_code=500)
+                    )
 
-            with patch.object(
-                httpx.AsyncClient,
-                "request",
-                new_callable=AsyncMock,
-                side_effect=mock_request,
-            ):
-                async with httpx.AsyncClient(timeout=30.0) as client:
-                    pool = WorkerPool(fetcher, client, max_workers=16)
-                    pool.spawn_workers(4)
-                    initial_count = pool.worker_count
+                await pool.check_scaling()
 
-                    for i in range(4):
-                        await pool.add_request(RequestMetadata(url=f"{TEST_URL}/{i}"))
-
-                    for _ in range(4):
-                        await asyncio.wait_for(pool.get_result(), timeout=2.0)
-                        await pool.check_scaling()
-
-                    assert pool.worker_count < initial_count
-                    await pool.shutdown_all()
+                # Worker count should NOT decrease due to errors
+                # (In old logic, ANY error would halve workers)
+                assert pool.worker_count >= initial_count
+                await pool.shutdown_all()
 
     @pytest.mark.asyncio
-    async def test_scale_down_respects_minimum(self) -> None:
-        """Scale down should never go below 1 worker."""
+    async def test_scale_up_requires_min_samples(self) -> None:
+        """Should not scale up until min_samples are collected."""
         with tempfile.TemporaryDirectory() as tmpdir:
             fetcher = AdaptiveFetcher.create(Path(tmpdir), max_parallelism=16)
 
-            with patch.object(
-                httpx.AsyncClient,
-                "request",
-                new_callable=AsyncMock,
-                side_effect=httpx.RequestError("timeout"),
-            ):
-                async with httpx.AsyncClient(timeout=30.0) as client:
-                    pool = WorkerPool(fetcher, client, max_workers=16)
-                    pool.spawn_workers(2)
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                pool = WorkerPool(fetcher, client, max_workers=16, min_samples=5)
+                pool.spawn_workers(1)
 
-                    for i in range(4):
-                        await pool.add_request(RequestMetadata(url=f"{TEST_URL}/{i}"))
+                # Only 2 samples (less than min_samples=5)
+                pool._rate_window_start = time.monotonic() - 1.0
+                pool.record_result(
+                    0, FetchResult(url=TEST_URL, success=True, status_code=200)
+                )
+                pool.record_result(
+                    0, FetchResult(url=TEST_URL, success=True, status_code=200)
+                )
 
-                    for _ in range(4):
-                        await asyncio.wait_for(pool.get_result(), timeout=2.0)
-                        await pool.check_scaling()
+                count_before = pool.worker_count
+                await pool.check_scaling()
 
-                    assert pool.worker_count >= 1
-                    await pool.shutdown_all()
+                # Should not scale (not enough samples)
+                assert pool.worker_count == count_before
+                await pool.shutdown_all()
 
 
 class TestIntegration:

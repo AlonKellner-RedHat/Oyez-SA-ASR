@@ -1,9 +1,10 @@
 # Edited by Claude
-"""Worker pool for adaptive parallel fetching."""
+"""Worker pool for adaptive parallel fetching with rate-based scaling."""
 
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -14,25 +15,36 @@ if TYPE_CHECKING:
 
 
 class WorkerPool:
-    """Manages a pool of worker coroutines for parallel fetching."""
+    """Manages a pool of worker coroutines with rate-based adaptive scaling.
+
+    Scaling logic:
+    - Doubles workers when throughput improves by >50%
+    - Locks scaling when diminishing returns detected (<50% improvement)
+    - Errors are handled by retries, not by reducing workers
+    """
 
     def __init__(
         self,
         fetcher: AdaptiveFetcher,
         client: httpx.AsyncClient,
         max_workers: int = 1024,
+        min_samples: int = 10,
     ) -> None:
         self.fetcher = fetcher
         self.client = client
         self.max_workers = max_workers
+        self.min_samples = min_samples  # Minimum samples before measuring rate
         self.request_queue: asyncio.Queue[RequestMetadata | None] = asyncio.Queue()
         self.result_queue: asyncio.Queue[tuple[int, FetchResult]] = asyncio.Queue()
         self._workers: dict[int, asyncio.Task[None]] = {}
         self._shutdown_events: dict[int, asyncio.Event] = {}
         self._next_worker_id = 0
-        self._worker_successes: dict[int, bool] = {}
-        self._had_failure = False
-        self._pending_scale_down = False
+
+        # Rate tracking
+        self._rate_window_start: float = time.monotonic()
+        self._rate_window_count: int = 0
+        self._last_rate: float = 0.0
+        self._scaling_locked: bool = False  # Stop scaling when diminishing returns
 
     @property
     def worker_count(self) -> int:
@@ -47,7 +59,6 @@ class WorkerPool:
             self._next_worker_id += 1
             shutdown_event = asyncio.Event()
             self._shutdown_events[worker_id] = shutdown_event
-            self._worker_successes[worker_id] = False
             task = asyncio.create_task(
                 _worker_coroutine(
                     worker_id=worker_id,
@@ -61,39 +72,47 @@ class WorkerPool:
             self._workers[worker_id] = task
 
     def record_result(self, worker_id: int, result: FetchResult) -> None:
-        """Record a result from a worker for scaling decisions."""
-        if result.success:
-            if worker_id in self._worker_successes:
-                self._worker_successes[worker_id] = True
-        else:
-            self._had_failure = True
-            self._pending_scale_down = True
+        """Record a result for rate tracking. Errors do not affect scaling."""
+        del worker_id, result  # Unused - we only track count
+        self._rate_window_count += 1
+
+    def _reset_rate_window(self) -> None:
+        """Reset the rate measurement window."""
+        self._rate_window_start = time.monotonic()
+        self._rate_window_count = 0
 
     async def check_scaling(self) -> None:
-        """Check if scaling action is needed and trigger it."""
-        if self._pending_scale_down:
-            self._pending_scale_down = False
-            await self.shutdown_half()
+        """Check if scaling action is needed based on throughput improvement.
+
+        Scales up only if throughput improves by >50%. Locks scaling when
+        diminishing returns are detected.
+        """
+        if self._scaling_locked:
             return
 
-        if self.worker_count > 0 and all(self._worker_successes.values()):
-            current = self.worker_count
-            if current < self.max_workers:
-                self.spawn_workers(current)
-                for wid in self._worker_successes:
-                    self._worker_successes[wid] = False
-                self._had_failure = False
-
-    async def shutdown_half(self) -> None:
-        """Shutdown half of the workers (minimum 1 remains)."""
-        current = self.worker_count
-        to_shutdown = current // 2
-        if current - to_shutdown < 1:
-            to_shutdown = current - 1
-        if to_shutdown <= 0:
+        # Not enough samples yet
+        if self._rate_window_count < self.min_samples:
             return
-        worker_ids = list(self._workers.keys())[:to_shutdown]
-        await self._shutdown_workers(worker_ids)
+
+        # Calculate current rate
+        elapsed = time.monotonic() - self._rate_window_start
+        if elapsed <= 0:
+            return
+
+        current_rate = self._rate_window_count / elapsed
+
+        # Check improvement threshold
+        if self._last_rate > 0:
+            improvement = (current_rate - self._last_rate) / self._last_rate
+            if improvement < 0.5:  # Less than 50% improvement
+                self._scaling_locked = True  # Diminishing returns - stop scaling
+                return
+
+        # Scale up: double workers
+        if self.worker_count < self.max_workers:
+            self._last_rate = current_rate
+            self.spawn_workers(self.worker_count)  # Double
+            self._reset_rate_window()
 
     async def _shutdown_workers(self, worker_ids: list[int]) -> None:
         """Shutdown specific workers by ID."""
@@ -108,8 +127,6 @@ class WorkerPool:
                     self._workers[wid].cancel()
                 del self._workers[wid]
                 del self._shutdown_events[wid]
-                if wid in self._worker_successes:
-                    del self._worker_successes[wid]
 
     async def shutdown_all(self) -> None:
         """Shutdown all workers."""
@@ -126,7 +143,6 @@ class WorkerPool:
                     self._workers[wid].cancel()
         self._workers.clear()
         self._shutdown_events.clear()
-        self._worker_successes.clear()
 
     async def add_request(self, request: RequestMetadata) -> None:
         """Add a request to the queue."""
