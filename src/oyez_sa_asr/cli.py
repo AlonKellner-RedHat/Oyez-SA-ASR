@@ -132,31 +132,28 @@ def scrape_cases(
     )
 
     # Stats tracking
-    stats = {"cached": 0, "new": 0, "failed": 0, "last_wave_size": 0}
+    stats = {"new": 0, "failed": 0}
 
-    # Create tqdm progress bar
-    pbar = tqdm(total=len(requests), desc="Fetching", unit="case", dynamic_ncols=True)
+    # Progress bar created lazily when we know uncached count
+    pbar: tqdm[None] | None = None
 
     def on_progress(
         completed: int, total: int, result: FetchResult, parallelism: int
     ) -> None:
-        """Update progress after each wave completes."""
-        del total  # Unused - tqdm handles progress display
-        # Count results from this wave
-        if result.from_cache:
-            stats["cached"] += 1
-        elif result.success:
+        """Update progress for each uncached request completed."""
+        nonlocal pbar
+        # Create progress bar on first call (now we know total uncached)
+        if pbar is None:
+            pbar = tqdm(total=total, desc="Fetching", unit="case", dynamic_ncols=True)
+
+        if result.success:
             stats["new"] += 1
         else:
             stats["failed"] += 1
 
-        # Update progress bar to completed count
         pbar.n = completed
         pbar.set_postfix(
-            parallelism=parallelism,
-            cached=stats["cached"],
-            new=stats["new"],
-            failed=stats["failed"],
+            parallelism=parallelism, new=stats["new"], failed=stats["failed"]
         )
         pbar.refresh()
 
@@ -164,7 +161,8 @@ def scrape_cases(
         return await fetcher.fetch_batch_adaptive(requests, on_progress)
 
     all_results = asyncio.run(run_fetch())
-    pbar.close()
+    if pbar is not None:
+        pbar.close()
 
     # Report results
     cached = sum(1 for r in all_results if r.from_cache)

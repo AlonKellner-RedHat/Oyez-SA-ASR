@@ -102,18 +102,15 @@ class AdaptiveFetcher:
             return FetchResult(url=request.url, success=False, error=str(e))
 
     def _partition_cached(
-        self, requests: Sequence[RequestMetadata], on_progress: ProgressCallback | None
+        self, requests: Sequence[RequestMetadata]
     ) -> tuple[list[FetchResult], list[tuple[RequestMetadata, int]]]:
         """Partition requests into cached results and uncached (with retry count 0)."""
         results: list[FetchResult] = []
         needs_fetch: list[tuple[RequestMetadata, int]] = []
-        total = len(requests)
         for request in requests:
             cached = self._check_cache(request)
             if cached:
                 results.append(cached)
-                if on_progress:
-                    on_progress(len(results), total, cached, 0)
             else:
                 needs_fetch.append((request, 0))
         return results, needs_fetch
@@ -129,11 +126,10 @@ class AdaptiveFetcher:
 
         shuffled = list(requests)
         random.shuffle(shuffled)
-        results, pending = self._partition_cached(shuffled, on_progress)
+        cached_results, pending = self._partition_cached(shuffled)
         if not pending:
-            return results
+            return cached_results
 
-        total = len(requests)
         pending_count = len(pending)
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -143,18 +139,20 @@ class AdaptiveFetcher:
             for req, _ in pending:
                 await pool.add_request(req)
 
-            collected = 0
-            while collected < pending_count:
+            fetched_results: list[FetchResult] = []
+            while len(fetched_results) < pending_count:
                 result = await pool.get_result()
                 await pool.check_scaling()
-                results.append(result)
-                collected += 1
+                fetched_results.append(result)
                 if on_progress:
-                    on_progress(len(results), total, result, pool.worker_count)
+                    # Report: completed uncached, total uncached, result, parallelism
+                    on_progress(
+                        len(fetched_results), pending_count, result, pool.worker_count
+                    )
 
             await pool.shutdown_all()
 
-        return results
+        return cached_results + fetched_results
 
     async def fetch_one(self, request: RequestMetadata) -> FetchResult:
         """Fetch a single request (convenience wrapper)."""
