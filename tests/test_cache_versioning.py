@@ -152,3 +152,45 @@ class TestFileCacheVersioning:
             changes_log = Path(tmpdir) / "changes.log"
             if changes_log.exists():
                 assert changes_log.read_text().strip() == ""
+
+    def test_raw_path_set_to_latest_version(self) -> None:
+        """raw_path should always point to the latest version's raw file."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = FileCache(Path(tmpdir))
+            request = RequestMetadata(url="https://example.com/rawpath")
+
+            # First version
+            r1 = FetchResult(
+                url=request.url,
+                success=True,
+                status_code=200,
+                raw_data=b'{"version": 1}',
+                content_type="application/json",
+            )
+            cache.set(request, r1)
+
+            meta_path = cache._get_meta_path(request)
+            with meta_path.open() as f:
+                data1 = json.load(f)
+
+            # raw_path should match the first version
+            assert data1["raw_path"] == data1["versions"][0]["raw_path"]
+
+            # Second version with different content
+            r2 = FetchResult(
+                url=request.url,
+                success=True,
+                status_code=200,
+                raw_data=b'{"version": 2}',
+                content_type="application/json",
+            )
+            cache.set(request, r2)
+
+            with meta_path.open() as f:
+                data2 = json.load(f)
+
+            # raw_path should now point to the second (latest) version
+            assert len(data2["versions"]) == 2
+            # The latest version is the one with most recent last_seen
+            latest = max(data2["versions"], key=lambda v: v["last_seen"])
+            assert data2["raw_path"] == latest["raw_path"]

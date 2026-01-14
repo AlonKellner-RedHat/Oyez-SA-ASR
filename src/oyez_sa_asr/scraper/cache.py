@@ -150,6 +150,10 @@ class FileCache:
             result.status_code or 200,
             result.content_type,
         )
+        # Update raw_path to point to latest version
+        latest = meta.get_latest_version()
+        meta.raw_path = latest.raw_path if latest else ""
+
         with meta_path.open("w") as f:
             json.dump(meta.to_dict(), f, indent=2)
 

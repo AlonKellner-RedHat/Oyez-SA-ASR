@@ -110,7 +110,7 @@ class CacheMeta:
     expires_at: datetime
     status_code: int
     content_type: str = "application/json"
-    raw_path: str = ""  # Deprecated: use versions[].raw_path instead
+    raw_path: str = ""  # Points to latest version's raw file for quick access
     versions: list[ContentVersion] = field(default_factory=list)
 
     def is_expired(self) -> bool:
