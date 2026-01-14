@@ -1,10 +1,8 @@
 # Edited by Claude
 """Adaptive parallel fetcher with automatic scaling."""
 
-import asyncio
 import json
 import random
-import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
@@ -12,6 +10,7 @@ import httpx
 
 from .cache import FileCache
 from .models import FetchResult, RequestMetadata
+from .worker_pool import WorkerPool
 
 # Type alias for progress callback: (completed, total, result, parallelism) -> None
 ProgressCallback = Callable[[int, int, FetchResult, int], None]
@@ -67,7 +66,7 @@ class AdaptiveFetcher:
     async def _fetch_network(
         self, client: httpx.AsyncClient, request: RequestMetadata
     ) -> FetchResult:
-        """Fetch from network only (no cache check), cache transient failures not stored."""
+        """Fetch from network only (no cache check)."""
         try:
             response = await client.request(
                 method=request.method, url=request.url, headers=request.headers
@@ -102,13 +101,6 @@ class AdaptiveFetcher:
         except httpx.RequestError as e:
             return FetchResult(url=request.url, success=False, error=str(e))
 
-    async def _execute_wave(
-        self, client: httpx.AsyncClient, wave: list[RequestMetadata]
-    ) -> list[FetchResult]:
-        """Execute a wave of network requests in parallel (no cache check)."""
-        tasks = [self._fetch_network(client, req) for req in wave]
-        return list(await asyncio.gather(*tasks))
-
     def _partition_cached(
         self, requests: Sequence[RequestMetadata], on_progress: ProgressCallback | None
     ) -> tuple[list[FetchResult], list[tuple[RequestMetadata, int]]]:
@@ -126,78 +118,41 @@ class AdaptiveFetcher:
                 needs_fetch.append((request, 0))
         return results, needs_fetch
 
-    def _process_wave_results(
-        self,
-        wave_items: list[tuple[RequestMetadata, int]],
-        wave_results: list[FetchResult],
-    ) -> tuple[list[FetchResult], list[tuple[RequestMetadata, int]]]:
-        """Separate wave results into successes and items needing retry."""
-        successes, retry = [], []
-        for i, result in enumerate(wave_results):
-            req, count = wave_items[i]
-            if (
-                result.success
-                or not self._is_transient_failure(result)
-                or count >= self.max_retries
-            ):
-                successes.append(result)
-            else:
-                retry.append((req, count + 1))
-        return successes, retry
-
-    def _adjust_parallelism(
-        self, parallelism: int, has_retry: bool, current_rate: float, best_rate: float
-    ) -> tuple[int, float, bool]:
-        """Adjust parallelism based on failures and throughput. Returns (new_p, new_best, frozen)."""
-        if has_retry:
-            return max(1, parallelism // 2), best_rate, True
-        if current_rate < best_rate * 0.9:  # Rate dropped >10% → backoff
-            return max(1, parallelism // 2), best_rate, True
-        new_best = max(best_rate, current_rate)
-        return min(parallelism * 2, self.max_parallelism), new_best, False
-
     async def fetch_batch_adaptive(
         self,
         requests: Sequence[RequestMetadata],
         on_progress: ProgressCallback | None = None,
     ) -> list[FetchResult]:
-        """Fetch with rate-based adaptive parallelism: increases while rate improves."""
+        """Fetch with worker-based adaptive parallelism."""
         if not requests:
             return []
 
-        # Shuffle requests to distribute load and avoid sequential patterns
         shuffled = list(requests)
         random.shuffle(shuffled)
         results, pending = self._partition_cached(shuffled, on_progress)
         if not pending:
             return results
 
-        total, parallelism, best_rate, frozen = len(requests), 1, 0.0, False
+        total = len(requests)
+        pending_count = len(pending)
+
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            while pending:
-                wave_items = pending[: min(parallelism, len(pending))]
-                pending = pending[len(wave_items) :]
+            pool = WorkerPool(self, client, max_workers=self.max_parallelism)
+            pool.spawn_workers(1)
 
-                start = time.monotonic()
-                wave_results = await self._execute_wave(
-                    client, [r for r, _ in wave_items]
-                )
-                elapsed = max(time.monotonic() - start, 0.001)
-                successes, retry = self._process_wave_results(wave_items, wave_results)
+            for req, _ in pending:
+                await pool.add_request(req)
 
-                current_rate = len(successes) / elapsed
-                if not frozen:
-                    parallelism, best_rate, frozen = self._adjust_parallelism(
-                        parallelism, bool(retry), current_rate, best_rate
-                    )
-                elif retry:
-                    parallelism = max(1, parallelism // 2)
-                pending = retry + pending
+            collected = 0
+            while collected < pending_count:
+                result = await pool.get_result()
+                await pool.check_scaling()
+                results.append(result)
+                collected += 1
+                if on_progress:
+                    on_progress(len(results), total, result, pool.worker_count)
 
-                for result in successes:
-                    results.append(result)
-                    if on_progress:
-                        on_progress(len(results), total, result, parallelism)
+            await pool.shutdown_all()
 
         return results
 
