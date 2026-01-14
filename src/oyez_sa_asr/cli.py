@@ -1,5 +1,5 @@
 # Edited by Claude
-"""Console script for oyez_sa_asr with scrape/process subcommands."""
+"""Console script for oyez_sa_asr with scrape/process/clear subcommands."""
 
 import asyncio
 import json
@@ -11,6 +11,7 @@ from rich.console import Console
 from tqdm import tqdm
 
 from ._example import example
+from .cli_clear import clear_app
 from .scraper import (
     AdaptiveFetcher,
     FetchResult,
@@ -26,6 +27,7 @@ console = Console(force_terminal=True)
 
 app.add_typer(scrape_app, name="scrape")
 app.add_typer(process_app, name="process")
+app.add_typer(clear_app, name="clear")
 
 
 @app.command()
