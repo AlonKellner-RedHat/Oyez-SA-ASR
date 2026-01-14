@@ -96,11 +96,17 @@ def scrape_cases(
         int,
         typer.Option("--max-parallelism", "-p", help="Maximum parallel requests"),
     ] = 1024,
+    min_improvement: Annotated[
+        float,
+        typer.Option(
+            "--min-improvement", "-m", help="Min rate improvement to scale (0.25=25%)"
+        ),
+    ] = 0.25,
 ) -> None:
     """Scrape detailed case information from the Oyez API.
 
-    Uses adaptive parallelism: starts at 1, doubles on success, halves on failure.
-    Automatically discovers the optimal parallelism for the API.
+    Uses adaptive parallelism with rate-based scaling. Doubles workers when
+    throughput improves by more than min-improvement (default 25%).
     """
     # Check if index file exists
     if not index_file.exists():
@@ -113,6 +119,7 @@ def scrape_cases(
     console.print(f"  Cache dir: {cache_dir}")
     console.print(f"  Cache TTL: {ttl_days} days")
     console.print(f"  Max parallelism: {max_parallelism}")
+    console.print(f"  Min improvement: {min_improvement:.0%}")
     console.print()
 
     # Load index and extract hrefs
@@ -130,7 +137,10 @@ def scrape_cases(
 
     # Fetch with adaptive parallelism
     fetcher = AdaptiveFetcher.create(
-        cache_dir, ttl_days=ttl_days, max_parallelism=max_parallelism
+        cache_dir,
+        ttl_days=ttl_days,
+        max_parallelism=max_parallelism,
+        min_improvement=min_improvement,
     )
 
     # Stats tracking

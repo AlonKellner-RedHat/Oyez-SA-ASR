@@ -31,8 +31,8 @@ class TestRateBasedScaling:
     """Tests for rate-based scaling logic."""
 
     @pytest.mark.asyncio
-    async def test_scale_up_when_rate_improves_50_percent(self) -> None:
-        """Should scale up when throughput improves by more than 50%."""
+    async def test_scale_up_when_rate_improves_enough(self) -> None:
+        """Should scale up when throughput improves by more than min_improvement."""
         with tempfile.TemporaryDirectory() as tmpdir:
             fetcher = AdaptiveFetcher.create(Path(tmpdir), max_parallelism=16)
 
@@ -56,8 +56,8 @@ class TestRateBasedScaling:
                 await pool.shutdown_all()
 
     @pytest.mark.asyncio
-    async def test_no_scale_up_when_rate_improves_less_than_50_percent(self) -> None:
-        """Should lock scaling when improvement is less than 50%."""
+    async def test_no_scale_up_when_rate_improves_below_threshold(self) -> None:
+        """Should lock scaling when improvement is less than min_improvement."""
         with tempfile.TemporaryDirectory() as tmpdir:
             fetcher = AdaptiveFetcher.create(Path(tmpdir), max_parallelism=16)
 

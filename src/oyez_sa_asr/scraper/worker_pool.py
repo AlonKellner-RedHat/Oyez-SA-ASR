@@ -18,8 +18,8 @@ class WorkerPool:
     """Manages a pool of worker coroutines with rate-based adaptive scaling.
 
     Scaling logic:
-    - Doubles workers when throughput improves by >50%
-    - Locks scaling when diminishing returns detected (<50% improvement)
+    - Doubles workers when throughput improves by more than min_improvement
+    - Locks scaling when diminishing returns detected (improvement < threshold)
     - Errors are handled by retries, not by reducing workers
     """
 
@@ -29,11 +29,13 @@ class WorkerPool:
         client: httpx.AsyncClient,
         max_workers: int = 1024,
         min_samples: int = 10,
+        min_improvement: float = 0.25,
     ) -> None:
         self.fetcher = fetcher
         self.client = client
         self.max_workers = max_workers
         self.min_samples = min_samples  # Minimum samples before measuring rate
+        self.min_improvement = min_improvement  # Required rate improvement to scale up
         self.request_queue: asyncio.Queue[RequestMetadata | None] = asyncio.Queue()
         self.result_queue: asyncio.Queue[tuple[int, FetchResult]] = asyncio.Queue()
         self._workers: dict[int, asyncio.Task[None]] = {}
@@ -84,8 +86,8 @@ class WorkerPool:
     async def check_scaling(self) -> None:
         """Check if scaling action is needed based on throughput improvement.
 
-        Scales up only if throughput improves by >50%. Locks scaling when
-        diminishing returns are detected.
+        Scales up only if throughput improves by more than min_improvement.
+        Locks scaling when diminishing returns are detected.
         """
         if self._scaling_locked:
             return
@@ -104,7 +106,7 @@ class WorkerPool:
         # Check improvement threshold
         if self._last_rate > 0:
             improvement = (current_rate - self._last_rate) / self._last_rate
-            if improvement < 0.5:  # Less than 50% improvement
+            if improvement < self.min_improvement:
                 self._scaling_locked = True  # Diminishing returns - stop scaling
                 return
 

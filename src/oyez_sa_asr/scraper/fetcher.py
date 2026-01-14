@@ -17,7 +17,7 @@ ProgressCallback = Callable[[int, int, FetchResult, int], None]
 
 
 class AdaptiveFetcher:
-    """HTTP fetcher with adaptive parallelism (doubles on success, halves on failure)."""
+    """HTTP fetcher with rate-based adaptive parallelism."""
 
     def __init__(
         self,
@@ -26,12 +26,14 @@ class AdaptiveFetcher:
         max_parallelism: int = 10,
         timeout: float = 30.0,
         max_retries: int = 3,
+        min_improvement: float = 0.25,
     ) -> None:
         """Initialize the fetcher."""
         self.cache = cache
         self.max_parallelism = max_parallelism
         self.timeout = timeout
         self.max_retries = max_retries
+        self.min_improvement = min_improvement  # Required rate improvement to scale up
 
     def _parse_cached_response(self, raw_bytes: bytes, content_type: str) -> object:
         """Parse cached raw bytes based on content type."""
@@ -133,7 +135,12 @@ class AdaptiveFetcher:
         pending_count = len(pending)
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            pool = WorkerPool(self, client, max_workers=self.max_parallelism)
+            pool = WorkerPool(
+                self,
+                client,
+                max_workers=self.max_parallelism,
+                min_improvement=self.min_improvement,
+            )
             pool.spawn_workers(1)
 
             for req, _ in pending:
@@ -173,6 +180,7 @@ class AdaptiveFetcher:
         max_parallelism: int = 10,
         timeout: float = 30.0,
         max_retries: int = 3,
+        min_improvement: float = 0.25,
     ) -> "AdaptiveFetcher":
         """Create a fetcher with a new cache."""
         cache = FileCache(cache_dir, ttl_days=ttl_days)
@@ -181,4 +189,5 @@ class AdaptiveFetcher:
             max_parallelism=max_parallelism,
             timeout=timeout,
             max_retries=max_retries,
+            min_improvement=min_improvement,
         )
