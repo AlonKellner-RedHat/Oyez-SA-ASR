@@ -50,8 +50,8 @@ class TestScrapeIndex:
     def test_scrape_index_default_cache_dir(self) -> None:
         """Should use .cache/index as default cache directory."""
         with (
-            patch("oyez_sa_asr.cli.AdaptiveFetcher"),
-            patch("oyez_sa_asr.cli.OyezCasesTraverser") as mock_traverser,
+            patch("oyez_sa_asr.cli_scrape.AdaptiveFetcher"),
+            patch("oyez_sa_asr.cli_scrape.OyezCasesTraverser") as mock_traverser,
         ):
             mock_traverser.return_value.fetch_all = AsyncMock(return_value=[])
             result = runner.invoke(app, ["scrape", "index", "--max-pages", "1"])
@@ -101,7 +101,7 @@ class TestScrapeCases:
 
             cache_dir = Path(tmpdir) / "cache"
 
-            with patch("oyez_sa_asr.cli.AdaptiveFetcher") as mock_fetcher_cls:
+            with patch("oyez_sa_asr.cli_scrape.AdaptiveFetcher") as mock_fetcher_cls:
                 mock_fetcher = mock_fetcher_cls.create.return_value
                 mock_fetcher.fetch_batch_adaptive = AsyncMock(return_value=[])
 

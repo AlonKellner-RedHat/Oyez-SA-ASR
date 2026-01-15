@@ -9,6 +9,49 @@ from pathlib import Path
 from typing import Any
 
 
+def extract_media_urls(cases_dir: Path) -> list[str]:
+    """Extract all case_media hrefs from processed case files.
+
+    Iterates over data/cases/{term}/*.json files and collects oral_arguments
+    and opinion_announcements hrefs, filtering out unavailable entries.
+
+    Args:
+        cases_dir: Directory containing processed case files.
+
+    Returns
+    -------
+        List of unique media URLs to fetch.
+    """
+    urls: set[str] = set()
+
+    if not cases_dir.exists():
+        return []
+
+    for term_dir in cases_dir.iterdir():
+        if not term_dir.is_dir():
+            continue
+
+        for case_file in term_dir.glob("*.json"):
+            try:
+                with case_file.open() as f:
+                    case_data = json.load(f)
+
+                # Extract oral arguments
+                for audio in case_data.get("oral_arguments", []) or []:
+                    if audio.get("href") and not audio.get("unavailable"):
+                        urls.add(audio["href"])
+
+                # Extract opinion announcements
+                for audio in case_data.get("opinion_announcements", []) or []:
+                    if audio.get("href") and not audio.get("unavailable"):
+                        urls.add(audio["href"])
+
+            except (json.JSONDecodeError, KeyError, TypeError):
+                continue
+
+    return list(urls)
+
+
 def parse_opinion_title(title: str) -> tuple[str, str | None]:
     """Parse opinion announcement title to extract type and speaker.
 
