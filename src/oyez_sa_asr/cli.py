@@ -12,17 +12,16 @@ from tqdm import tqdm
 
 from ._example import example
 from .cli_clear import clear_app
+from .cli_process import process_app
 from .scraper import (
     AdaptiveFetcher,
     FetchResult,
     OyezCasesTraverser,
     RequestMetadata,
-    parse_cached_cases,
 )
 
 app = typer.Typer()
 scrape_app = typer.Typer(help="Scrape data from Oyez API")
-process_app = typer.Typer(help="Process cached data into structured files")
 console = Console(force_terminal=True)
 
 app.add_typer(scrape_app, name="scrape")
@@ -186,39 +185,6 @@ def scrape_cases(
     console.print(f"  Cached: {cached}")
     console.print(f"  New fetches: {new_fetches}")
     console.print(f"  Failures: {failures}")
-
-
-# === PROCESS COMMANDS ===
-
-
-@process_app.command(name="index")
-def process_index(
-    cache_dir: Annotated[
-        Path,
-        typer.Option("--cache-dir", "-c", help="Directory with cached responses"),
-    ] = Path(".cache/index"),
-    output: Annotated[
-        Path,
-        typer.Option("--output", "-o", help="Output JSON file path"),
-    ] = Path("data/index/cases_index.json"),
-) -> None:
-    """Parse cached case index into a structured JSON file."""
-    console.print("[bold]Parsing cached case index[/bold]")
-    console.print(f"  Cache dir: {cache_dir}")
-    console.print(f"  Output: {output}")
-    console.print()
-
-    index = parse_cached_cases(cache_dir)
-
-    if index.total_cases == 0:
-        console.print("[yellow]Warning:[/yellow] No cached cases found.")
-        console.print("Run 'scrape index' first to fetch cases from the API.")
-        return
-
-    index.save(output)
-
-    console.print(f"[bold green]Done![/bold green] Parsed {index.total_cases} cases.")
-    console.print(f"Index saved to: {output}")
 
 
 if __name__ == "__main__":
