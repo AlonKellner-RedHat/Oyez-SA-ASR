@@ -28,24 +28,52 @@ Example: 95-7452_19961104a.delivery.mp3
 
 ### Opinion Announcements
 
+| Suffix | Type |
+|--------|------|
+| `-opinion` | Main/majority opinion |
+| `-opinion-1`, `-opinion-2` | Numbered parts |
+| `-opinion-dissent` | Dissenting opinion |
+| `-opinion-concur` | Concurring opinion |
+
+## Accessing Separate Opinion Audio
+
+**Data path:**
+
 ```text
-{docket}_{date}-opinion.delivery.mp3
-{docket}_{date}-opinion-{n}.delivery.mp3  (multiple parts)
+Case JSON → opinion_announcement[] → href → case_media API → media_file[]
 ```
 
-### Dissent Recordings
+**Title patterns** identify opinion types:
 
-Dissenting opinions have specific filenames:
+| Pattern | Example |
+|---------|---------|
+| Standard | `Opinion Announcement - June 30, 2023` |
+| Numbered | `Opinion Announcement - June 29, 2015 (Part 1)` |
+| Dissent (new) | `Dissenting Opinion - Sotomayor - June 30, 2023` |
+| Dissent (old) | `Opinion Announcement - June 19, 2017 (Dissent by Breyer)` |
+| Concurrence | `Concurring Opinion - Jackson - June 27, 2024` |
 
-```text
-{docket}_{date}-opinion-dissent.delivery.mp3
+Example: 303 Creative v. Elenis (21-476):
+
+```json
+{
+  "opinion_announcement": [
+    {
+      "title": "Opinion Announcement - June 30, 2023",
+      "href": "...opinion_announcement_audio/25574"
+    },
+    {
+      "title": "Dissenting Opinion - Sotomayor - June 30, 2023",
+      "href": "...opinion_announcement_audio/25583"
+    }
+  ]
+}
 ```
 
-**Example:**
+Fetching the dissent href returns:
 
 ```text
-https://s3.amazonaws.com/oyez.case-media.mp3/case_data/2022/21-476/
-21-476_20230630-opinion-dissent.delivery.mp3
+.../21-476_20230630-opinion-dissent.delivery.mp3
 ```
 
 ## Transcript Structure
