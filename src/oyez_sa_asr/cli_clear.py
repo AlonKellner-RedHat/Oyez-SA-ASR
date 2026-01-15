@@ -2,6 +2,7 @@
 """Clear commands for oyez_sa_asr CLI."""
 
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
@@ -10,6 +11,26 @@ from rich.console import Console
 
 console = Console(force_terminal=True)
 clear_app = typer.Typer(help="Clear cached and processed data")
+
+
+@dataclass
+class ClearTarget:
+    """Configuration for a clearable data type."""
+
+    name: str
+    cache_dir: Path
+    data_dir: Path | None  # None if no data directory (audio is cache-only)
+
+
+# Define all clearable targets with their default paths
+CLEAR_TARGETS: dict[str, ClearTarget] = {
+    "index": ClearTarget("index", Path(".cache/index"), Path("data/index")),
+    "cases": ClearTarget("cases", Path(".cache/cases"), Path("data/cases")),
+    "transcripts": ClearTarget(
+        "transcripts", Path(".cache/transcripts"), Path("data/transcripts")
+    ),
+    "audio": ClearTarget("audio", Path(".cache/audio"), None),  # Cache-only
+}
 
 
 def _clear_directory(path: Path, name: str) -> int:
@@ -24,71 +45,85 @@ def _clear_directory(path: Path, name: str) -> int:
     return count
 
 
-@clear_app.command(name="index")
-def clear_index(
-    cache_dir: Annotated[
-        Path,
-        typer.Option("--cache-dir", "-c", help="Cache directory to clear"),
-    ] = Path(".cache/index"),
-    data_dir: Annotated[
-        Path,
-        typer.Option("--data-dir", "-d", help="Data directory to clear"),
-    ] = Path("data/index"),
-    force: Annotated[
-        bool,
-        typer.Option("--force", "-f", help="Skip confirmation prompt"),
-    ] = False,
-) -> None:
-    """Clear all index-related cache and data."""
-    console.print("[bold]Clearing index data[/bold]")
-    console.print(f"  Cache dir: {cache_dir}")
-    console.print(f"  Data dir: {data_dir}")
-    console.print()
+def _make_clear_with_data(name: str, default_cache: Path, default_data: Path) -> None:
+    """Create a clear command with both cache and data directories."""
 
-    if not force:
-        confirm = typer.confirm("Are you sure you want to delete this data?")
-        if not confirm:
-            console.print("[yellow]Cancelled[/yellow]")
-            raise typer.Exit(0)
+    @clear_app.command(name=name)
+    def cmd(
+        cache_dir: Annotated[
+            Path,
+            typer.Option("--cache-dir", "-c", help="Cache directory to clear"),
+        ] = default_cache,
+        data_dir: Annotated[
+            Path,
+            typer.Option("--data-dir", "-d", help="Data directory to clear"),
+        ] = default_data,
+        force: Annotated[
+            bool,
+            typer.Option("--force", "-f", help="Skip confirmation prompt"),
+        ] = False,
+    ) -> None:
+        console.print(f"[bold]Clearing {name} data[/bold]")
+        console.print(f"  Cache dir: {cache_dir}")
+        console.print(f"  Data dir: {data_dir}")
+        console.print()
 
-    total = 0
-    total += _clear_directory(cache_dir, "Cache")
-    total += _clear_directory(data_dir, "Data")
+        if not force:
+            confirm = typer.confirm("Are you sure you want to delete this data?")
+            if not confirm:
+                console.print("[yellow]Cancelled[/yellow]")
+                raise typer.Exit(0)
 
-    console.print()
-    console.print(f"[bold green]Done![/bold green] Removed {total} files total.")
+        total = 0
+        total += _clear_directory(cache_dir, "Cache")
+        total += _clear_directory(data_dir, "Data")
+
+        console.print()
+        console.print(f"[bold green]Done![/bold green] Removed {total} files.")
+
+    cmd.__doc__ = f"Clear all {name}-related cache and data."
 
 
-@clear_app.command(name="cases")
-def clear_cases(
-    cache_dir: Annotated[
-        Path,
-        typer.Option("--cache-dir", "-c", help="Cache directory to clear"),
-    ] = Path(".cache/cases"),
-    data_dir: Annotated[
-        Path,
-        typer.Option("--data-dir", "-d", help="Data directory to clear"),
-    ] = Path("data/cases"),
-    force: Annotated[
-        bool,
-        typer.Option("--force", "-f", help="Skip confirmation prompt"),
-    ] = False,
-) -> None:
-    """Clear all cases-related cache and data."""
-    console.print("[bold]Clearing cases data[/bold]")
-    console.print(f"  Cache dir: {cache_dir}")
-    console.print(f"  Data dir: {data_dir}")
-    console.print()
+def _make_clear_cache_only(name: str, default_cache: Path) -> None:
+    """Create a clear command for cache-only targets."""
 
-    if not force:
-        confirm = typer.confirm("Are you sure you want to delete this data?")
-        if not confirm:
-            console.print("[yellow]Cancelled[/yellow]")
-            raise typer.Exit(0)
+    @clear_app.command(name=name)
+    def cmd(
+        cache_dir: Annotated[
+            Path,
+            typer.Option("--cache-dir", "-c", help="Cache directory to clear"),
+        ] = default_cache,
+        force: Annotated[
+            bool,
+            typer.Option("--force", "-f", help="Skip confirmation prompt"),
+        ] = False,
+    ) -> None:
+        console.print(f"[bold]Clearing {name} cache[/bold]")
+        console.print(f"  Cache dir: {cache_dir}")
+        console.print()
 
-    total = 0
-    total += _clear_directory(cache_dir, "Cache")
-    total += _clear_directory(data_dir, "Data")
+        if not force:
+            confirm = typer.confirm("Are you sure you want to delete this data?")
+            if not confirm:
+                console.print("[yellow]Cancelled[/yellow]")
+                raise typer.Exit(0)
 
-    console.print()
-    console.print(f"[bold green]Done![/bold green] Removed {total} files total.")
+        total = _clear_directory(cache_dir, "Cache")
+
+        console.print()
+        console.print(f"[bold green]Done![/bold green] Removed {total} files.")
+
+    cmd.__doc__ = f"Clear {name} cache."
+
+
+def _create_clear_command(target: ClearTarget) -> None:
+    """Create and register a clear command for a target."""
+    if target.data_dir is not None:
+        _make_clear_with_data(target.name, target.cache_dir, target.data_dir)
+    else:
+        _make_clear_cache_only(target.name, target.cache_dir)
+
+
+# Register all clear commands
+for _target in CLEAR_TARGETS.values():
+    _create_clear_command(_target)
