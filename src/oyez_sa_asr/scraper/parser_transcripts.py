@@ -164,5 +164,46 @@ def build_transcript_to_case_map(cases_dir: Path) -> dict[int, tuple[str, str]]:
     return case_map
 
 
+def extract_audio_urls(transcripts_dir: Path) -> list[str]:
+    """Extract all audio URLs from processed transcripts.
+
+    Args:
+        transcripts_dir: Directory containing processed transcript files.
+
+    Returns
+    -------
+        List of unique audio URLs (mp3, ogg, hls).
+    """
+    audio_urls: set[str] = set()
+
+    if not transcripts_dir.exists():
+        return []
+
+    for term_dir in transcripts_dir.iterdir():
+        if not term_dir.is_dir():
+            continue
+
+        for docket_dir in term_dir.iterdir():
+            if not docket_dir.is_dir():
+                continue
+
+            for transcript_file in docket_dir.glob("*.json"):
+                try:
+                    with transcript_file.open() as f:
+                        transcript_data = json.load(f)
+
+                    audio_data = transcript_data.get("metadata", {}).get(
+                        "audio_urls", {}
+                    )
+                    for url in audio_data.values():
+                        if url:
+                            audio_urls.add(url)
+
+                except (json.JSONDecodeError, KeyError, TypeError):
+                    continue
+
+    return sorted(audio_urls)
+
+
 # Re-export ProcessedTranscript from transcript_models to maintain backwards compat
 from .transcript_models import ProcessedTranscript  # noqa: E402, F401

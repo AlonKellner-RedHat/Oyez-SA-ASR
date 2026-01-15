@@ -37,7 +37,9 @@ class TestRateBasedScaling:
             fetcher = AdaptiveFetcher.create(Path(tmpdir), max_parallelism=16)
 
             async with httpx.AsyncClient(timeout=30.0) as client:
-                pool = WorkerPool(fetcher, client, max_workers=16, min_samples=2)
+                pool = WorkerPool(
+                    fetcher.downloader, client, max_workers=16, min_samples=2
+                )
                 pool.spawn_workers(1)
                 initial_count = pool.worker_count
 
@@ -62,7 +64,9 @@ class TestRateBasedScaling:
             fetcher = AdaptiveFetcher.create(Path(tmpdir), max_parallelism=16)
 
             async with httpx.AsyncClient(timeout=30.0) as client:
-                pool = WorkerPool(fetcher, client, max_workers=16, min_samples=2)
+                pool = WorkerPool(
+                    fetcher.downloader, client, max_workers=16, min_samples=2
+                )
                 pool.spawn_workers(2)
 
                 # Set a previous rate of 10 req/s
@@ -92,7 +96,9 @@ class TestRateBasedScaling:
             fetcher = AdaptiveFetcher.create(Path(tmpdir), max_parallelism=16)
 
             async with httpx.AsyncClient(timeout=30.0) as client:
-                pool = WorkerPool(fetcher, client, max_workers=16, min_samples=2)
+                pool = WorkerPool(
+                    fetcher.downloader, client, max_workers=16, min_samples=2
+                )
                 pool.spawn_workers(2)
                 pool._scaling_locked = True  # Pre-lock scaling
 
@@ -118,7 +124,9 @@ class TestRateBasedScaling:
             )
 
             async with httpx.AsyncClient(timeout=30.0) as client:
-                pool = WorkerPool(fetcher, client, max_workers=16, min_samples=10)
+                pool = WorkerPool(
+                    fetcher.downloader, client, max_workers=16, min_samples=10
+                )
                 pool.spawn_workers(4)
                 initial_count = pool.worker_count
 
@@ -142,7 +150,9 @@ class TestRateBasedScaling:
             fetcher = AdaptiveFetcher.create(Path(tmpdir), max_parallelism=16)
 
             async with httpx.AsyncClient(timeout=30.0) as client:
-                pool = WorkerPool(fetcher, client, max_workers=16, min_samples=5)
+                pool = WorkerPool(
+                    fetcher.downloader, client, max_workers=16, min_samples=5
+                )
                 pool.spawn_workers(1)
 
                 # Only 2 samples (less than min_samples=5)

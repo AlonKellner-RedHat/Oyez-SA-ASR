@@ -89,7 +89,9 @@ class TestCacheMetaVersioned:
             status_code=200,
             versions=[v],
         )
-        assert meta.get_latest_version().content_hash == "only"
+        latest = meta.get_latest_version()
+        assert latest is not None
+        assert latest.content_hash == "only"
 
     def test_get_latest_version_multiple(self) -> None:
         """get_latest_version should return version with most recent last_seen."""
@@ -105,7 +107,9 @@ class TestCacheMetaVersioned:
             200,
             versions=[old, new],
         )
-        assert meta.get_latest_version().content_hash == "new"
+        latest = meta.get_latest_version()
+        assert latest is not None
+        assert latest.content_hash == "new"
 
     def test_get_latest_version_empty(self) -> None:
         """get_latest_version should return None when no versions."""

@@ -57,6 +57,7 @@ class TestCitation:
         """Should parse raw citation dict."""
         raw = {"volume": "382", "page": "372", "year": "1966"}
         citation = Citation.from_raw(raw)
+        assert citation is not None
         assert citation.volume == "382"
         assert citation.page == "372"
         assert citation.year == "1966"

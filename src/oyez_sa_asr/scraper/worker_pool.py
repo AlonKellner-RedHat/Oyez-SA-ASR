@@ -5,12 +5,10 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    import httpx
-
-    from .fetcher import AdaptiveFetcher
+    from .downloader import AsyncDownloader
     from .models import FetchResult, RequestMetadata
 
 
@@ -25,17 +23,26 @@ class WorkerPool:
 
     def __init__(
         self,
-        fetcher: AdaptiveFetcher,
-        client: httpx.AsyncClient,
+        downloader: AsyncDownloader,
+        client: Any,
         max_workers: int = 1024,
         min_samples: int = 10,
         min_improvement: float = 0.25,
     ) -> None:
-        self.fetcher = fetcher
+        """Initialize the worker pool.
+
+        Args:
+            downloader: The async downloader backend.
+            client: The async client created by the downloader.
+            max_workers: Maximum number of workers.
+            min_samples: Minimum samples before measuring rate.
+            min_improvement: Required rate improvement to scale up.
+        """
+        self.downloader = downloader
         self.client = client
         self.max_workers = max_workers
-        self.min_samples = min_samples  # Minimum samples before measuring rate
-        self.min_improvement = min_improvement  # Required rate improvement to scale up
+        self.min_samples = min_samples
+        self.min_improvement = min_improvement
         self.request_queue: asyncio.Queue[RequestMetadata | None] = asyncio.Queue()
         self.result_queue: asyncio.Queue[tuple[int, FetchResult]] = asyncio.Queue()
         self._workers: dict[int, asyncio.Task[None]] = {}
@@ -65,7 +72,7 @@ class WorkerPool:
                 _worker_coroutine(
                     worker_id=worker_id,
                     client=self.client,
-                    fetcher=self.fetcher,
+                    downloader=self.downloader,
                     request_queue=self.request_queue,
                     result_queue=self.result_queue,
                     shutdown_event=shutdown_event,
@@ -159,8 +166,8 @@ class WorkerPool:
 
 async def _worker_coroutine(
     worker_id: int,
-    client: httpx.AsyncClient,
-    fetcher: AdaptiveFetcher,
+    client: Any,
+    downloader: AsyncDownloader,
     request_queue: asyncio.Queue[RequestMetadata | None],
     result_queue: asyncio.Queue[tuple[int, FetchResult]],
     shutdown_event: asyncio.Event,
@@ -175,12 +182,14 @@ async def _worker_coroutine(
         if request is None:
             break
 
-        result = await fetcher._fetch_network(client, request)
+        result = await downloader.fetch(client, request)
         retries = 0
-        while fetcher._is_transient_failure(result) and retries < fetcher.max_retries:
+        while (
+            downloader.is_transient_failure(result) and retries < downloader.max_retries
+        ):
             retries += 1
             await asyncio.sleep(0.1 * retries)
-            result = await fetcher._fetch_network(client, request)
+            result = await downloader.fetch(client, request)
 
         await result_queue.put((worker_id, result))
 

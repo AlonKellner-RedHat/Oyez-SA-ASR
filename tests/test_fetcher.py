@@ -3,46 +3,54 @@
 
 import tempfile
 from pathlib import Path
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
 from oyez_sa_asr.scraper import AdaptiveFetcher, RequestMetadata
+from oyez_sa_asr.scraper.httpx_downloader import HttpxDownloader
 from oyez_sa_asr.scraper.models import FetchResult
+
+
+def _get_httpx_downloader(fetcher: AdaptiveFetcher) -> HttpxDownloader:
+    """Cast downloader to HttpxDownloader for test access to cache."""
+    return cast("HttpxDownloader", fetcher.downloader)
 
 
 class TestAdaptiveFetcher:
     """Tests for AdaptiveFetcher."""
 
     def test_create_factory_method(self) -> None:
-        """Factory method should create fetcher with cache."""
+        """Factory method should create fetcher with HTTP downloader."""
         with tempfile.TemporaryDirectory() as tmpdir:
             fetcher = AdaptiveFetcher.create(Path(tmpdir), ttl_days=7)
-            assert fetcher.cache is not None
+            assert fetcher.downloader is not None
             assert fetcher.max_parallelism == 10
 
-    def test_is_transient_failure(self) -> None:
-        """Should correctly identify transient failures."""
+    def test_downloader_is_transient_failure(self) -> None:
+        """Downloader should correctly identify transient failures."""
         with tempfile.TemporaryDirectory() as tmpdir:
             fetcher = AdaptiveFetcher.create(Path(tmpdir))
+            downloader = fetcher.downloader
             url = "https://test.example.com/api"
             # Success is not transient
-            assert not fetcher._is_transient_failure(
+            assert not downloader.is_transient_failure(
                 FetchResult(url=url, success=True, status_code=200)
             )
             # Connection error (no status) is transient
-            assert fetcher._is_transient_failure(
+            assert downloader.is_transient_failure(
                 FetchResult(url=url, success=False, error="timeout")
             )
             # 429/502/503/504 are transient
             for code in [429, 502, 503, 504]:
-                assert fetcher._is_transient_failure(
+                assert downloader.is_transient_failure(
                     FetchResult(url=url, success=False, status_code=code)
                 )
             # 400/404 are permanent
             for code in [400, 404]:
-                assert not fetcher._is_transient_failure(
+                assert not downloader.is_transient_failure(
                     FetchResult(url=url, success=False, status_code=code)
                 )
 
@@ -68,7 +76,7 @@ class TestAdaptiveFetcher:
                 raw_data=b'{"cached": true}',
                 content_type="application/json",
             )
-            fetcher.cache.set(request, result)
+            _get_httpx_downloader(fetcher).cache.set(request, result)
             fetched = await fetcher.fetch_one(request)
             assert fetched.success is True
             assert fetched.from_cache is True
@@ -130,15 +138,15 @@ class TestAdaptiveFetcher:
 
     @pytest.mark.asyncio
     async def test_check_cache_returns_none_if_not_cached(self) -> None:
-        """_check_cache should return None for uncached requests."""
+        """Downloader check_cache should return None for uncached requests."""
         with tempfile.TemporaryDirectory() as tmpdir:
             fetcher = AdaptiveFetcher.create(Path(tmpdir))
             request = RequestMetadata(url="https://example.com/not-cached")
-            assert fetcher._check_cache(request) is None
+            assert fetcher.downloader.check_cache(request) is None
 
     @pytest.mark.asyncio
     async def test_check_cache_returns_result_if_cached(self) -> None:
-        """_check_cache should return cached result."""
+        """Downloader check_cache should return cached result."""
         with tempfile.TemporaryDirectory() as tmpdir:
             fetcher = AdaptiveFetcher.create(Path(tmpdir))
             request = RequestMetadata(url="https://example.com/cached")
@@ -150,7 +158,7 @@ class TestAdaptiveFetcher:
                 raw_data=b'{"x": 1}',
                 content_type="application/json",
             )
-            fetcher.cache.set(request, result)
-            cached = fetcher._check_cache(request)
+            _get_httpx_downloader(fetcher).cache.set(request, result)
+            cached = fetcher.downloader.check_cache(request)
             assert cached is not None
             assert cached.from_cache is True

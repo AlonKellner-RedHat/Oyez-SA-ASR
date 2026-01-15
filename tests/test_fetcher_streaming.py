@@ -26,21 +26,21 @@ def _make_mock_response() -> MagicMock:
 
 
 class TestIsTransientFailure:
-    """Tests for _is_transient_failure method."""
+    """Tests for downloader is_transient_failure method."""
 
     def test_success_not_transient(self) -> None:
         """Success results are not transient."""
         with tempfile.TemporaryDirectory() as tmpdir:
             fetcher = AdaptiveFetcher.create(Path(tmpdir))
             result = FetchResult(url=TEST_URL, success=True, status_code=200)
-            assert fetcher._is_transient_failure(result) is False
+            assert fetcher.downloader.is_transient_failure(result) is False
 
     def test_connection_error_transient(self) -> None:
         """Connection errors are transient."""
         with tempfile.TemporaryDirectory() as tmpdir:
             fetcher = AdaptiveFetcher.create(Path(tmpdir))
             result = FetchResult(url=TEST_URL, success=False, error="timeout")
-            assert fetcher._is_transient_failure(result) is True
+            assert fetcher.downloader.is_transient_failure(result) is True
 
     def test_transient_status_codes(self) -> None:
         """429, 502, 503, 504 are transient."""
@@ -48,7 +48,7 @@ class TestIsTransientFailure:
             fetcher = AdaptiveFetcher.create(Path(tmpdir))
             for code in [429, 502, 503, 504]:
                 result = FetchResult(url=TEST_URL, success=False, status_code=code)
-                assert fetcher._is_transient_failure(result) is True
+                assert fetcher.downloader.is_transient_failure(result) is True
 
     def test_permanent_status_codes(self) -> None:
         """400, 401, 403, 404 are permanent."""
@@ -56,7 +56,7 @@ class TestIsTransientFailure:
             fetcher = AdaptiveFetcher.create(Path(tmpdir))
             for code in [400, 401, 403, 404]:
                 result = FetchResult(url=TEST_URL, success=False, status_code=code)
-                assert fetcher._is_transient_failure(result) is False
+                assert fetcher.downloader.is_transient_failure(result) is False
 
 
 class TestFetchBatchAdaptive:

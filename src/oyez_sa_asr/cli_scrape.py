@@ -10,14 +10,16 @@ import typer
 from rich.console import Console
 from tqdm import tqdm
 
+from .cli_scrape_audio import add_audio_command
 from .cli_scrape_transcripts import add_transcripts_command
 from .scraper import AdaptiveFetcher, FetchResult, OyezCasesTraverser, RequestMetadata
 
 scrape_app = typer.Typer(help="Scrape data from Oyez API")
 console = Console(force_terminal=True)
 
-# Add transcripts command from separate module
+# Add commands from separate modules
 add_transcripts_command(scrape_app)
+add_audio_command(scrape_app)
 
 
 @scrape_app.command(name="index")

@@ -38,6 +38,7 @@ class TestWorkerCoroutine:
         """Worker should fetch request from queue and report result."""
         with tempfile.TemporaryDirectory() as tmpdir:
             fetcher = AdaptiveFetcher.create(Path(tmpdir))
+            downloader = fetcher.downloader
             request_queue: asyncio.Queue[RequestMetadata | None] = asyncio.Queue()
             result_queue: asyncio.Queue[tuple[int, FetchResult]] = asyncio.Queue()
             shutdown_event = asyncio.Event()
@@ -54,7 +55,12 @@ class TestWorkerCoroutine:
             ):
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     await _worker_coroutine(
-                        1, client, fetcher, request_queue, result_queue, shutdown_event
+                        1,
+                        client,
+                        downloader,
+                        request_queue,
+                        result_queue,
+                        shutdown_event,
                     )
 
             assert result_queue.qsize() == 1
@@ -67,6 +73,7 @@ class TestWorkerCoroutine:
         """Worker should exit when shutdown event is set."""
         with tempfile.TemporaryDirectory() as tmpdir:
             fetcher = AdaptiveFetcher.create(Path(tmpdir))
+            downloader = fetcher.downloader
             request_queue: asyncio.Queue[RequestMetadata | None] = asyncio.Queue()
             result_queue: asyncio.Queue[tuple[int, FetchResult]] = asyncio.Queue()
             shutdown_event = asyncio.Event()
@@ -74,7 +81,7 @@ class TestWorkerCoroutine:
 
             async with httpx.AsyncClient(timeout=30.0) as client:
                 await _worker_coroutine(
-                    1, client, fetcher, request_queue, result_queue, shutdown_event
+                    1, client, downloader, request_queue, result_queue, shutdown_event
                 )
 
             assert result_queue.qsize() == 0
@@ -84,6 +91,7 @@ class TestWorkerCoroutine:
         """Worker should process multiple requests until shutdown."""
         with tempfile.TemporaryDirectory() as tmpdir:
             fetcher = AdaptiveFetcher.create(Path(tmpdir))
+            downloader = fetcher.downloader
             request_queue: asyncio.Queue[RequestMetadata | None] = asyncio.Queue()
             result_queue: asyncio.Queue[tuple[int, FetchResult]] = asyncio.Queue()
             shutdown_event = asyncio.Event()
@@ -100,7 +108,12 @@ class TestWorkerCoroutine:
             ):
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     await _worker_coroutine(
-                        1, client, fetcher, request_queue, result_queue, shutdown_event
+                        1,
+                        client,
+                        downloader,
+                        request_queue,
+                        result_queue,
+                        shutdown_event,
                     )
 
             assert result_queue.qsize() == 3
@@ -110,6 +123,7 @@ class TestWorkerCoroutine:
         """Worker should report failed requests to result queue."""
         with tempfile.TemporaryDirectory() as tmpdir:
             fetcher = AdaptiveFetcher.create(Path(tmpdir))
+            downloader = fetcher.downloader
             request_queue: asyncio.Queue[RequestMetadata | None] = asyncio.Queue()
             result_queue: asyncio.Queue[tuple[int, FetchResult]] = asyncio.Queue()
             shutdown_event = asyncio.Event()
@@ -125,7 +139,12 @@ class TestWorkerCoroutine:
             ):
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     await _worker_coroutine(
-                        1, client, fetcher, request_queue, result_queue, shutdown_event
+                        1,
+                        client,
+                        downloader,
+                        request_queue,
+                        result_queue,
+                        shutdown_event,
                     )
 
             assert result_queue.qsize() == 1
@@ -141,8 +160,9 @@ class TestWorkerPool:
         """WorkerPool should spawn requested number of workers."""
         with tempfile.TemporaryDirectory() as tmpdir:
             fetcher = AdaptiveFetcher.create(Path(tmpdir))
+            downloader = fetcher.downloader
             async with httpx.AsyncClient(timeout=30.0) as client:
-                pool = WorkerPool(fetcher, client)
+                pool = WorkerPool(downloader, client)
                 pool.spawn_workers(3)
                 assert pool.worker_count == 3
                 await pool.shutdown_all()
@@ -152,6 +172,7 @@ class TestWorkerPool:
         """Workers in pool should process requests from queue."""
         with tempfile.TemporaryDirectory() as tmpdir:
             fetcher = AdaptiveFetcher.create(Path(tmpdir))
+            downloader = fetcher.downloader
 
             with patch.object(
                 httpx.AsyncClient,
@@ -160,7 +181,7 @@ class TestWorkerPool:
                 return_value=_make_mock_response(),
             ):
                 async with httpx.AsyncClient(timeout=30.0) as client:
-                    pool = WorkerPool(fetcher, client)
+                    pool = WorkerPool(downloader, client)
                     pool.spawn_workers(2)
 
                     for i in range(4):

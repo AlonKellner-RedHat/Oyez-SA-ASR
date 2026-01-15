@@ -4,6 +4,10 @@ exclude = [
   '^https://.*pepy\.tech*',
   '^https://github\.com/AlonKellner/oyez_sa_asr*',
   '^https://alonkellner\.github\.io/oyez_sa_asr*',
+  # S3 URLs (may be parsed incorrectly or require auth)
+  '^https://s3',
+  '.*\.s3\.amazonaws\.com.*',
+  '.*s3\.amazonaws\.com.*',
   # Shell variables that look like URLs
   '\$',
   # Localhost URLs
