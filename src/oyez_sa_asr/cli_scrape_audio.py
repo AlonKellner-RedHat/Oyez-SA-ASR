@@ -15,6 +15,23 @@ from .scraper.parser_transcripts import extract_audio_urls
 console = Console(force_terminal=True)
 
 
+def _is_expected_skip(result: FetchResult) -> bool:
+    """Check if failure is expected (file missing or access denied).
+
+    Expected skips:
+    - 404/NoSuchKey: file doesn't exist in S3
+    - 403/AccessDenied: file not publicly accessible
+    - Unrecognized S3 URL: non-S3 URL (api.oyez.org legacy format)
+    """
+    err = str(result.error or "")
+    return (
+        result.status_code in (403, 404)
+        or "NoSuchKey" in err
+        or "AccessDenied" in err
+        or "Unrecognized S3 URL" in err
+    )
+
+
 def add_audio_command(app: typer.Typer) -> None:
     """Add the audio command to the scrape app."""
 
@@ -80,7 +97,7 @@ def add_audio_command(app: typer.Typer) -> None:
             min_improvement=min_improvement,
         )
 
-        stats = {"new": 0, "failed": 0}
+        stats = {"new": 0, "skipped": 0, "error": 0}
         pbar: tqdm[None] | None = None
 
         def on_progress(
@@ -94,12 +111,17 @@ def add_audio_command(app: typer.Typer) -> None:
 
             if result.success:
                 stats["new"] += 1
+            elif _is_expected_skip(result):
+                stats["skipped"] += 1  # Expected: not available
             else:
-                stats["failed"] += 1
+                stats["error"] += 1  # Unexpected error
 
             pbar.n = completed
             pbar.set_postfix(
-                parallelism=parallelism, new=stats["new"], failed=stats["failed"]
+                p=parallelism,
+                ok=stats["new"],
+                skip=stats["skipped"],
+                err=stats["error"],
             )
             pbar.refresh()
 
@@ -112,11 +134,16 @@ def add_audio_command(app: typer.Typer) -> None:
 
         cached = sum(1 for r in all_results if r.from_cache)
         new_downloads = sum(1 for r in all_results if r.success and not r.from_cache)
-        failures = sum(1 for r in all_results if not r.success)
+        skipped = sum(1 for r in all_results if not r.success and _is_expected_skip(r))
+        errors = sum(
+            1 for r in all_results if not r.success and not _is_expected_skip(r)
+        )
 
         console.print()
         console.print("[bold green]Done![/bold green]")
         console.print(f"  Already cached: {cached}")
         console.print(f"  New downloads: {new_downloads}")
-        console.print(f"  Failures: {failures}")
+        console.print(f"  Skipped (unavailable): {skipped}")
+        if errors > 0:
+            console.print(f"  [red]Errors: {errors}[/red]")
         console.print(f"  Cache: {cache_dir}")
