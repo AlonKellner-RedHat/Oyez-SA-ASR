@@ -135,11 +135,19 @@ class ProcessedTranscript:
             return f"{self.type}_{self.speaker.lower()}.json"
         return f"{self.type}.json"
 
-    def save(self, output_dir: Path) -> Path:
-        """Save transcript to JSON file."""
+    def save(self, output_dir: Path, source_path: Path | None = None) -> Path:
+        """Save transcript to JSON file.
+
+        Args:
+            output_dir: Root output directory.
+            source_path: Optional path to source cache file for provenance.
+        """
         case_dir = output_dir / self.term / self.case_docket
         case_dir.mkdir(parents=True, exist_ok=True)
         file_path = case_dir / self.get_filename()
+        data = self.to_dict()
+        if source_path:
+            data["_meta"] = {"source_path": str(source_path)}
         with file_path.open("w") as f:
-            json.dump(self.to_dict(), f, indent=2)
+            json.dump(data, f, indent=2)
         return file_path

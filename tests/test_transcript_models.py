@@ -218,3 +218,24 @@ class TestProcessedTranscript:
 
         assert len(transcript.turns) == 0
         assert transcript.metadata["duration_seconds"] == 0.0
+
+    def test_save_with_source_path(self) -> None:
+        """Save includes _meta.source_path when provided."""
+        raw = {
+            "id": 99,
+            "title": "Oral Argument - Provenance",
+            "media_file": [],
+            "transcript": {"duration": 5.0, "sections": []},
+        }
+        transcript = ProcessedTranscript.from_raw(raw, "2023", "22-789")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir)
+            src = Path("/cache/raw/xyz789.json")
+            transcript.save(output_dir, source_path=src)
+
+            out_file = output_dir / "2023" / "22-789" / "oral_argument.json"
+            with out_file.open() as f:
+                data = json.load(f)
+            assert "_meta" in data, "Saved transcript must include _meta"
+            assert data["_meta"]["source_path"] == str(src)

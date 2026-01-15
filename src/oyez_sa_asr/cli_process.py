@@ -101,7 +101,7 @@ def process_cases(
                     continue
 
                 case = ProcessedCase.from_raw(raw_data)
-                case.save(output_dir)
+                case.save(output_dir, source_path=raw_file)
                 processed_count += 1
 
             except (json.JSONDecodeError, KeyError, TypeError):
@@ -184,7 +184,7 @@ def process_transcripts(
 
                 term, docket = case_info
                 transcript = ProcessedTranscript.from_raw(raw_data, term, docket)
-                transcript.save(output_dir)
+                transcript.save(output_dir, source_path=raw_file)
                 processed_count += 1
 
             except (json.JSONDecodeError, KeyError, TypeError):

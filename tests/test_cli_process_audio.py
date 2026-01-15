@@ -96,6 +96,9 @@ class TestProcessAudioExecution:
             assert meta["sample_rate"] == 44100
             assert meta["channels"] == 1
             assert meta["file_size"] > 0
+            # Provenance: source_path must point to original cache file
+            assert "source_path" in meta, "Metadata must include source_path"
+            assert str(mp3_path) in meta["source_path"]
 
     def test_processes_ogg_to_flac(self) -> None:
         """Should convert OGG to FLAC."""

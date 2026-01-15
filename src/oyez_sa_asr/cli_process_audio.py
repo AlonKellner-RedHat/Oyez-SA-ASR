@@ -92,6 +92,7 @@ def add_audio_command(app: typer.Typer) -> None:
 
                     # Extract metadata, load, re-encode, save
                     meta = get_audio_metadata(audio_path)
+                    meta["source_path"] = str(audio_path)
                     samples, sr = load_audio(audio_path)
                     flac_path = out_dir / f"{stem}.flac"
                     save_audio(
