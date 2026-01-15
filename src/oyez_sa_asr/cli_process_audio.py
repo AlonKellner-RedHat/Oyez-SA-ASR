@@ -3,9 +3,10 @@
 
 import json
 import os
-from concurrent.futures import ProcessPoolExecutor, as_completed
+import random
+from concurrent.futures import BrokenExecutor, ProcessPoolExecutor, as_completed
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any, cast
 
 import typer
 from rich.console import Console
@@ -14,6 +15,11 @@ from tqdm import tqdm
 from .audio_utils import get_audio_metadata, load_audio, save_audio
 
 console = Console(force_terminal=True)
+
+# Process files in batches to limit memory usage from pending futures
+_BATCH_SIZE = 500
+# Recycle workers after this many tasks to prevent memory leaks
+_MAX_TASKS_PER_CHILD = 50
 
 
 def _find_audio_files(cache_dir: Path) -> list[Path]:
@@ -81,20 +87,47 @@ def _filter_pending(
 def _run_parallel(
     pending: list[Path], output_dir: Path, bits: int, num_workers: int
 ) -> tuple[int, int]:
-    """Process files in parallel. Returns (processed, errors)."""
+    """Process files in parallel with batching. Returns (processed, errors)."""
+    # Shuffle to distribute load across different years/cases
+    shuffled = pending.copy()
+    random.shuffle(shuffled)
+
     processed, errors = 0, 0
-    with ProcessPoolExecutor(max_workers=num_workers) as executor:
-        futures = {
-            executor.submit(_process_single_file, p, output_dir, bits): p
-            for p in pending
-        }
-        with tqdm(as_completed(futures), total=len(futures), desc="Processing") as pbar:
-            for future in pbar:
-                if future.result()[0]:
-                    processed += 1
-                else:
-                    errors += 1
-                pbar.set_postfix(ok=processed, err=errors)
+    total = len(shuffled)
+
+    with tqdm(total=total, desc="Processing") as pbar:
+        # Process in batches to limit memory from pending futures
+        for batch_start in range(0, total, _BATCH_SIZE):
+            batch = shuffled[batch_start : batch_start + _BATCH_SIZE]
+
+            # max_tasks_per_child recycles workers to prevent memory leaks
+            # Cast to Any to bypass incomplete type stubs (Python 3.11+ param)
+            executor_cls = cast("Any", ProcessPoolExecutor)
+            with executor_cls(
+                max_workers=num_workers,
+                max_tasks_per_child=_MAX_TASKS_PER_CHILD,
+            ) as executor:
+                futures = {
+                    executor.submit(_process_single_file, p, output_dir, bits): p
+                    for p in batch
+                }
+
+                for future in as_completed(futures):
+                    try:
+                        success, _ = future.result()
+                        if success:
+                            processed += 1
+                        else:
+                            errors += 1
+                    except BrokenExecutor:
+                        # Worker crashed - count as error, pool will restart
+                        errors += 1
+                    except Exception:
+                        errors += 1
+
+                    pbar.update(1)
+                    pbar.set_postfix(ok=processed, err=errors)
+
     return processed, errors
 
 
