@@ -37,18 +37,22 @@ class TestGetExtensionForContentType:
     """Tests for get_extension_for_content_type."""
 
     def test_json(self) -> None:
+        """JSON content types should return .json extension."""
         assert get_extension_for_content_type("application/json") == ".json"
         assert (
             get_extension_for_content_type("application/json; charset=utf-8") == ".json"
         )
 
     def test_html(self) -> None:
+        """HTML content type should return .html extension."""
         assert get_extension_for_content_type("text/html") == ".html"
 
     def test_partial_match(self) -> None:
+        """Content types containing json should return .json extension."""
         assert get_extension_for_content_type("application/vnd.api+json") == ".json"
 
     def test_unknown(self) -> None:
+        """Unknown content types should return .bin extension."""
         assert get_extension_for_content_type("application/unknown") == ".bin"
 
 
@@ -56,6 +60,7 @@ class TestCacheMeta:
     """Tests for CacheMeta."""
 
     def test_is_expired_false(self) -> None:
+        """Non-expired cache should return False."""
         meta = CacheMeta(
             url="https://example.com",
             fetched_at=datetime.now(timezone.utc),
@@ -65,6 +70,7 @@ class TestCacheMeta:
         assert not meta.is_expired()
 
     def test_is_expired_true(self) -> None:
+        """Expired cache should return True."""
         meta = CacheMeta(
             url="https://example.com",
             fetched_at=datetime.now(timezone.utc) - timedelta(days=2),
@@ -74,6 +80,7 @@ class TestCacheMeta:
         assert meta.is_expired()
 
     def test_to_dict_and_from_dict(self) -> None:
+        """CacheMeta should round-trip through dict serialization."""
         orig = CacheMeta.create(
             url="https://example.com",
             status_code=200,
@@ -84,6 +91,7 @@ class TestCacheMeta:
         assert restored.url == orig.url
 
     def test_create_sets_expiration(self) -> None:
+        """Create should set expires_at based on ttl_days."""
         meta = CacheMeta.create(
             url="https://example.com",
             status_code=200,
@@ -97,6 +105,7 @@ class TestCacheEntry:
     """Tests for CacheEntry."""
 
     def test_properties(self) -> None:
+        """CacheEntry should expose meta properties."""
         meta = CacheMeta.create(
             url="https://example.com", status_code=200, raw_path="raw/abc.json"
         )
