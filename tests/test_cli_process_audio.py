@@ -199,3 +199,30 @@ class TestProcessAudioExecution:
             assert result.exit_code == 0
             output = strip_ansi(result.output)
             assert "3" in output  # Should process all 3 files
+
+    def test_many_files_no_hang(self) -> None:
+        """Regression test: process >50 files per worker without hanging."""
+        # Edited by Claude - tests Python 3.14 max_tasks_per_child deadlock fix
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir, output_dir = Path(tmpdir) / "cache", Path(tmpdir) / "data"
+            num_files = 60  # More than old 50 max_tasks_per_child limit
+            for i in range(num_files):
+                mp3_dir = cache_dir / "oyez.case-media.mp3/case_data/2020" / f"c{i}"
+                mp3_dir.mkdir(parents=True)
+                save_audio(make_sine(sr=16000, dur=0.05), 16000, mp3_dir / f"a{i}.mp3")
+
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "audio",
+                    "-c",
+                    str(cache_dir),
+                    "-o",
+                    str(output_dir),
+                    "-w",
+                    "2",
+                ],
+            )
+            assert result.exit_code == 0
+            assert str(num_files) in strip_ansi(result.output)

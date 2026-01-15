@@ -6,7 +6,7 @@ import os
 import random
 from concurrent.futures import BrokenExecutor, ProcessPoolExecutor, as_completed
 from pathlib import Path
-from typing import Annotated, Any, cast
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -18,8 +18,8 @@ console = Console(force_terminal=True)
 
 # Process files in batches to limit memory usage from pending futures
 _BATCH_SIZE = 500
-# Recycle workers after this many tasks to prevent memory leaks
-_MAX_TASKS_PER_CHILD = 50
+# Limit workers to prevent OOM - audio files can use 300+ MB RAM each
+_MAX_WORKERS = 4
 
 
 def _find_audio_files(cache_dir: Path) -> list[Path]:
@@ -100,13 +100,9 @@ def _run_parallel(
         for batch_start in range(0, total, _BATCH_SIZE):
             batch = shuffled[batch_start : batch_start + _BATCH_SIZE]
 
-            # max_tasks_per_child recycles workers to prevent memory leaks
-            # Cast to Any to bypass incomplete type stubs (Python 3.11+ param)
-            executor_cls = cast("Any", ProcessPoolExecutor)
-            with executor_cls(
-                max_workers=num_workers,
-                max_tasks_per_child=_MAX_TASKS_PER_CHILD,
-            ) as executor:
+            # Note: max_tasks_per_child causes deadlock in Python 3.14 when all
+            # workers recycle simultaneously. Batching handles memory instead.
+            with ProcessPoolExecutor(max_workers=num_workers) as executor:
                 futures = {
                     executor.submit(_process_single_file, p, output_dir, bits): p
                     for p in batch
@@ -169,7 +165,9 @@ def add_audio_command(app: typer.Typer) -> None:
         ] = 0,
     ) -> None:
         """Process cached audio into standardized FLAC format with metadata."""
-        num_workers = workers if workers > 0 else os.cpu_count() or 1
+        # Limit workers to prevent OOM - audio files can use 300+ MB RAM each
+        cpu_workers = os.cpu_count() or 1
+        num_workers = workers if workers > 0 else min(cpu_workers, _MAX_WORKERS)
 
         console.print("[bold]Processing cached audio files[/bold]")
         console.print(f"  Cache dir: {cache_dir}")
