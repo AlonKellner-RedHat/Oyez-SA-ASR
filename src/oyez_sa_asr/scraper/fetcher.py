@@ -119,12 +119,18 @@ class AdaptiveFetcher:
         timeout: float = 30.0,
         max_retries: int = 3,
         min_improvement: float = 0.25,
+        expected_unavailable_codes: frozenset[int] | None = None,
     ) -> "AdaptiveFetcher":
         """Create a fetcher with HTTP backend (default)."""
         from .httpx_downloader import HttpxDownloader  # noqa: PLC0415
 
         cache = FileCache(cache_dir, ttl_days=ttl_days)
-        downloader = HttpxDownloader(cache, timeout=timeout, max_retries=max_retries)
+        downloader = HttpxDownloader(
+            cache,
+            timeout=timeout,
+            max_retries=max_retries,
+            expected_unavailable_codes=expected_unavailable_codes,
+        )
         return cls(
             downloader,
             max_parallelism=max_parallelism,
@@ -138,11 +144,16 @@ class AdaptiveFetcher:
         max_parallelism: int = 64,
         max_retries: int = 3,
         min_improvement: float = 0.25,
+        expected_unavailable_codes: frozenset[int] | None = None,
     ) -> "AdaptiveFetcher":
         """Create a fetcher with S3 backend for audio downloads."""
         from .s3_downloader import S3Downloader  # noqa: PLC0415
 
-        downloader = S3Downloader(cache_dir, max_retries=max_retries)
+        downloader = S3Downloader(
+            cache_dir,
+            max_retries=max_retries,
+            expected_unavailable_codes=expected_unavailable_codes,
+        )
         return cls(
             downloader,
             max_parallelism=max_parallelism,

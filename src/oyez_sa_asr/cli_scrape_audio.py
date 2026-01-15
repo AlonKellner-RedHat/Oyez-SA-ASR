@@ -132,18 +132,29 @@ def add_audio_command(app: typer.Typer) -> None:
         if pbar is not None:
             pbar.close()
 
-        cached = sum(1 for r in all_results if r.from_cache)
+        # Categorize results
+        cached_ok = sum(1 for r in all_results if r.from_cache and r.success)
+        cached_unavailable = sum(
+            1 for r in all_results if r.from_cache and not r.success
+        )
         new_downloads = sum(1 for r in all_results if r.success and not r.from_cache)
-        skipped = sum(1 for r in all_results if not r.success and _is_expected_skip(r))
+        new_unavailable = sum(
+            1
+            for r in all_results
+            if not r.success and not r.from_cache and _is_expected_skip(r)
+        )
         errors = sum(
-            1 for r in all_results if not r.success and not _is_expected_skip(r)
+            1
+            for r in all_results
+            if not r.success and not r.from_cache and not _is_expected_skip(r)
         )
 
         console.print()
         console.print("[bold green]Done![/bold green]")
-        console.print(f"  Already cached: {cached}")
+        console.print(f"  Cached (downloaded): {cached_ok}")
+        console.print(f"  Cached (unavailable): {cached_unavailable}")
         console.print(f"  New downloads: {new_downloads}")
-        console.print(f"  Skipped (unavailable): {skipped}")
+        console.print(f"  New unavailable: {new_unavailable}")
         if errors > 0:
             console.print(f"  [red]Errors: {errors}[/red]")
         console.print(f"  Cache: {cache_dir}")

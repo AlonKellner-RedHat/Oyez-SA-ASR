@@ -10,6 +10,9 @@ import httpx
 from .cache import FileCache
 from .models import FetchResult, RequestMetadata
 
+# Default: no expected unavailable codes for API requests
+DEFAULT_EXPECTED_UNAVAILABLE_CODES: frozenset[int] = frozenset()
+
 
 class HttpxDownloader:
     """HTTP download backend using httpx.AsyncClient."""
@@ -20,6 +23,7 @@ class HttpxDownloader:
         *,
         timeout: float = 30.0,
         max_retries: int = 3,
+        expected_unavailable_codes: frozenset[int] | None = None,
     ) -> None:
         """Initialize the HTTP downloader.
 
@@ -27,10 +31,17 @@ class HttpxDownloader:
             cache: File cache for storing responses.
             timeout: Request timeout in seconds.
             max_retries: Maximum retry attempts for transient failures.
+            expected_unavailable_codes: Status codes to treat as "unavailable" (not errors).
+                These are cached but marked as failures. Default: none.
         """
         self.cache = cache
         self.timeout = timeout
         self.max_retries = max_retries
+        self.expected_unavailable_codes = (
+            expected_unavailable_codes
+            if expected_unavailable_codes is not None
+            else DEFAULT_EXPECTED_UNAVAILABLE_CODES
+        )
 
     def _parse_cached_response(self, raw_bytes: bytes, content_type: str) -> object:
         """Parse cached raw bytes based on content type."""
