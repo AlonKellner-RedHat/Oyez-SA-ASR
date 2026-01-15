@@ -123,3 +123,79 @@ class TestProcessAudioExecution:
 
             flac_path = output_dir / "2021" / "20-456" / "20-456_20210501-opinion.flac"
             assert flac_path.exists()
+
+    def test_skips_already_processed(self) -> None:
+        """Should skip files that already have output FLAC."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            output_dir = Path(tmpdir) / "data"
+            mp3_dir = (
+                cache_dir / "oyez.case-media.mp3" / "case_data" / "2020" / "19-999"
+            )
+            mp3_dir.mkdir(parents=True)
+
+            # Create test MP3
+            samples = make_sine(sr=44100, dur=0.2)
+            mp3_path = mp3_dir / "test_skip.mp3"
+            save_audio(samples, 44100, mp3_path)
+
+            # Pre-create output FLAC (simulate already processed)
+            out_flac_dir = output_dir / "2020" / "19-999"
+            out_flac_dir.mkdir(parents=True)
+            flac_path = out_flac_dir / "test_skip.flac"
+            flac_path.write_bytes(b"dummy_existing_content")
+            orig_mtime = flac_path.stat().st_mtime
+
+            # Run command
+            result = runner.invoke(
+                app,
+                ["process", "audio", "-c", str(cache_dir), "-o", str(output_dir)],
+            )
+            assert result.exit_code == 0
+            output = strip_ansi(result.output)
+            # Should report skipping and file should be unchanged
+            assert "skip" in output.lower(), f"Expected 'skip' in output: {output}"
+            assert flac_path.stat().st_mtime == orig_mtime, "File was modified"
+
+    def test_workers_option_in_help(self) -> None:
+        """Should show --workers option in help."""
+        result = runner.invoke(app, ["process", "audio", "--help"])
+        assert result.exit_code == 0
+        output = strip_ansi(result.output)
+        assert "--workers" in output or "-w" in output
+
+    def test_parallel_processing(self) -> None:
+        """Should process multiple files with workers."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            output_dir = Path(tmpdir) / "data"
+
+            # Create multiple test files
+            for i in range(3):
+                mp3_dir = (
+                    cache_dir
+                    / "oyez.case-media.mp3"
+                    / "case_data"
+                    / "2020"
+                    / f"case-{i}"
+                )
+                mp3_dir.mkdir(parents=True)
+                samples = make_sine(sr=44100, dur=0.1)
+                save_audio(samples, 44100, mp3_dir / f"audio_{i}.mp3")
+
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "audio",
+                    "-c",
+                    str(cache_dir),
+                    "-o",
+                    str(output_dir),
+                    "--workers",
+                    "2",
+                ],
+            )
+            assert result.exit_code == 0
+            output = strip_ansi(result.output)
+            assert "3" in output  # Should process all 3 files
