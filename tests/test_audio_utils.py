@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from oyez_sa_asr.audio_utils import load_audio, save_audio
+from oyez_sa_asr.audio_utils import get_audio_metadata, load_audio, save_audio
 
 
 def make_sine(
@@ -155,6 +155,49 @@ class TestUnsupportedFormat:
             path = Path(d) / "test.xyz"
             with pytest.raises(ValueError, match="Unsupported format"):
                 save_audio(samples, sr, path)
+
+
+class TestAudioMetadata:
+    """Test get_audio_metadata() function."""
+
+    def test_mp3_metadata(self) -> None:
+        """Extract metadata from MP3 file."""
+        sr, samples = 44100, make_sine(sr=44100, dur=0.5, ch=1)
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "test.mp3"
+            save_audio(samples, sr, path)
+            meta = get_audio_metadata(path)
+            assert meta["format"] == "mp3"
+            assert meta["sample_rate"] == sr
+            assert meta["channels"] == 1
+            dur = float(meta["duration"])  # type: ignore[arg-type]
+            assert 0.4 < dur < 0.6
+            assert int(meta["file_size"]) > 0  # type: ignore[arg-type]
+
+    def test_flac_metadata(self) -> None:
+        """Extract metadata from FLAC file."""
+        sr, samples = 48000, make_sine(sr=48000, dur=0.3, ch=2)
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "test.flac"
+            save_audio(samples, sr, path)
+            meta = get_audio_metadata(path)
+            assert meta["format"] == "flac"
+            assert meta["sample_rate"] == sr
+            assert meta["channels"] == 2
+            dur = float(meta["duration"])  # type: ignore[arg-type]
+            assert 0.2 < dur < 0.4
+            assert int(meta["file_size"]) > 0  # type: ignore[arg-type]
+
+    def test_ogg_metadata(self) -> None:
+        """Extract metadata from OGG file."""
+        sr, samples = 44100, make_sine(sr=44100, dur=0.5, ch=1)
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "test.ogg"
+            save_audio(samples, sr, path)
+            meta = get_audio_metadata(path)
+            assert meta["format"] == "ogg"
+            assert meta["sample_rate"] == sr
+            assert meta["channels"] == 1
 
 
 class TestHLSLoading:

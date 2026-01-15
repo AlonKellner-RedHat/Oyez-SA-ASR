@@ -24,6 +24,52 @@ class _CodecConfig(NamedTuple):
     scale: float
 
 
+class AudioMetadata(NamedTuple):
+    """Audio file metadata."""
+
+    format: str
+    sample_rate: int
+    channels: int
+    duration: float
+    bitrate: int | None
+    file_size: int
+
+
+def get_audio_metadata(path: Path | str) -> dict[str, int | float | str | None]:
+    """Extract metadata from an audio file.
+
+    Args:
+        path: Path to the audio file.
+
+    Returns
+    -------
+        Dictionary with keys: format, sample_rate, channels, duration,
+        bitrate, file_size.
+    """
+    path = Path(path)
+    file_size = path.stat().st_size
+
+    with av.open(str(path)) as container:
+        stream = container.streams.audio[0]
+        # Get format from container format name
+        fmt = container.format.name or path.suffix.lstrip(".").lower()
+        sample_rate: int = stream.rate
+        channels: int = stream.codec_context.channels
+        # Duration in seconds
+        duration = float(container.duration) / 1_000_000 if container.duration else 0.0
+        # Bitrate (may be None for some formats)
+        bitrate = stream.codec_context.bit_rate
+
+    return {
+        "format": fmt,
+        "sample_rate": sample_rate,
+        "channels": channels,
+        "duration": duration,
+        "bitrate": bitrate,
+        "file_size": file_size,
+    }
+
+
 # Codec configurations for supported formats
 _CODEC_CONFIGS: dict[str, _CodecConfig] = {
     "mp3": _CodecConfig("libmp3lame", "fltp", 1.0),
