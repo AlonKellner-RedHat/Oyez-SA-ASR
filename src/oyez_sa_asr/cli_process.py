@@ -3,7 +3,7 @@
 
 import json
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 from rich.console import Console
@@ -16,6 +16,16 @@ from .scraper.parser_transcripts import (
     ProcessedTranscript,
     build_transcript_to_case_map,
 )
+
+
+def _get_term_from_raw(raw_data: dict[str, Any]) -> str | None:
+    """Extract term from raw case/transcript data.
+
+    Returns None for missing or empty term values.
+    """
+    term = raw_data.get("term")
+    return term if term else None
+
 
 process_app = typer.Typer(help="Process cached data into structured files")
 console = Console(force_terminal=True)
@@ -64,6 +74,10 @@ def process_cases(
         Path,
         typer.Option("--output-dir", "-o", help="Output directory for processed cases"),
     ] = Path("data/cases"),
+    terms: Annotated[
+        list[str] | None,
+        typer.Option("--term", "-T", help="Filter to specific term(s)"),
+    ] = None,
 ) -> None:
     """Parse cached case details into structured JSON files.
 
@@ -73,6 +87,8 @@ def process_cases(
     console.print("[bold]Processing cached case details[/bold]")
     console.print(f"  Cache dir: {cache_dir}")
     console.print(f"  Output dir: {output_dir}")
+    if terms:
+        console.print(f"  Terms: {', '.join(terms)}")
     console.print()
 
     raw_dir = cache_dir / "api.oyez.org" / "raw"
@@ -83,8 +99,10 @@ def process_cases(
         return
 
     processed_count = 0
+    skipped_term = 0
     error_count = 0
 
+    term_set = set(terms) if terms else None
     raw_files = list(raw_dir.glob("*.json"))
     if not raw_files:
         console.print("[yellow]Warning:[/yellow] No cached cases found.")
@@ -100,6 +118,13 @@ def process_cases(
                 if isinstance(raw_data, list) or "ID" not in raw_data:
                     continue
 
+                # Apply term filter
+                if term_set:
+                    case_term = _get_term_from_raw(raw_data)
+                    if case_term not in term_set:
+                        skipped_term += 1
+                        continue
+
                 case = ProcessedCase.from_raw(raw_data)
                 case.save(output_dir, source_path=raw_file)
                 processed_count += 1
@@ -110,6 +135,8 @@ def process_cases(
 
     console.print()
     console.print(f"[bold green]Done![/bold green] Processed {processed_count} cases.")
+    if skipped_term > 0:
+        console.print(f"  Skipped (term filter): {skipped_term}")
     if error_count > 0:
         console.print(
             f"[yellow]Warnings:[/yellow] {error_count} files skipped due to errors"
@@ -131,6 +158,10 @@ def process_transcripts(
         Path,
         typer.Option("--output-dir", "-o", help="Output directory for transcripts"),
     ] = Path("data/transcripts"),
+    terms: Annotated[
+        list[str] | None,
+        typer.Option("--term", "-T", help="Filter to specific term(s)"),
+    ] = None,
 ) -> None:
     """Parse cached transcripts into structured JSON files.
 
@@ -141,6 +172,8 @@ def process_transcripts(
     console.print(f"  Cache dir: {cache_dir}")
     console.print(f"  Cases dir: {cases_dir}")
     console.print(f"  Output dir: {output_dir}")
+    if terms:
+        console.print(f"  Terms: {', '.join(terms)}")
     console.print()
 
     raw_dir = cache_dir / "api.oyez.org" / "raw"
@@ -151,7 +184,7 @@ def process_transcripts(
         return
 
     console.print("Building transcript-to-case mapping...")
-    case_map = build_transcript_to_case_map(cases_dir)
+    case_map = build_transcript_to_case_map(cases_dir, terms)
     console.print(f"  Found {len(case_map)} transcript-case mappings")
     console.print()
 

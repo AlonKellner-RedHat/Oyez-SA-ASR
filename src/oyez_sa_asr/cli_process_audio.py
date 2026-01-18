@@ -168,6 +168,10 @@ def add_audio_command(app: typer.Typer) -> None:
             Path,
             typer.Option("--output-dir", "-o", help="Output directory"),
         ] = Path("data/audio"),
+        terms: Annotated[
+            list[str] | None,
+            typer.Option("--term", "-T", help="Filter to specific term(s)"),
+        ] = None,
         bits: Annotated[
             int,
             typer.Option("--bits", "-b", help="FLAC bit depth (16 or 24)"),
@@ -184,10 +188,12 @@ def add_audio_command(app: typer.Typer) -> None:
         console.print("[bold]Processing cached audio files[/bold]")
         console.print(f"  Cache dir: {cache_dir}")
         console.print(f"  Output dir: {output_dir}")
+        if terms:
+            console.print(f"  Terms: {', '.join(terms)}")
         console.print(f"  FLAC bit depth: {bits}, Workers: {num_workers}")
         console.print()
 
-        sources = find_audio_sources(cache_dir)
+        sources = find_audio_sources(cache_dir, terms)
         if not sources:
             console.print("[yellow]No audio files found in cache.[/yellow]")
             return

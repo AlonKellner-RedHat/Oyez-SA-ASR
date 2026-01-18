@@ -153,6 +153,6 @@ class TestScrapeAudioCommand:
             )
 
             assert result.exit_code == 0
-            mock_extract.assert_called_once_with(transcripts_dir)
+            mock_extract.assert_called_once_with(transcripts_dir, None)
             mock_fetcher_cls.create_s3.assert_called_once()
             mock_fetcher.fetch_batch_adaptive.assert_called_once()

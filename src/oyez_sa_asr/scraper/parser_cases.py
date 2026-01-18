@@ -24,15 +24,24 @@ __all__ = [
 ]
 
 
-def extract_media_urls(cases_dir: Path) -> list[str]:
-    """Extract all case_media hrefs from processed case files."""
+def extract_media_urls(cases_dir: Path, terms: list[str] | None = None) -> list[str]:
+    """Extract all case_media hrefs from processed case files.
+
+    Args:
+        cases_dir: Directory containing processed case files.
+        terms: Optional list of terms to filter by.
+    """
     urls: set[str] = set()
 
     if not cases_dir.exists():
         return []
 
+    term_set = set(terms) if terms else None
+
     for term_dir in cases_dir.iterdir():
         if not term_dir.is_dir():
+            continue
+        if term_set and term_dir.name not in term_set:
             continue
 
         for case_file in term_dir.glob("*.json"):

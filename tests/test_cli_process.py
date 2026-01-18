@@ -9,6 +9,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from oyez_sa_asr.cli import app
+from oyez_sa_asr.cli_process import _get_term_from_raw
 
 runner = CliRunner()
 
@@ -16,6 +17,88 @@ runner = CliRunner()
 def strip_ansi(text: str) -> str:
     """Remove ANSI escape codes from text."""
     return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
+
+class TestHelperFunctions:
+    """Tests for helper functions."""
+
+    def test_get_term_from_raw_with_term(self) -> None:
+        """Extracts term from raw data."""
+        result = _get_term_from_raw({"term": "2024"})
+        assert result == "2024"
+
+    def test_get_term_from_raw_no_term(self) -> None:
+        """Returns None for missing term."""
+        result = _get_term_from_raw({})
+        assert result is None
+
+    def test_get_term_from_raw_empty_term(self) -> None:
+        """Returns None for empty term."""
+        result = _get_term_from_raw({"term": ""})
+        assert result is None
+
+
+class TestProcessIndex:
+    """Tests for process index command."""
+
+    def test_process_index_help(self) -> None:
+        """Shows help for process index."""
+        result = runner.invoke(app, ["process", "index", "--help"])
+        assert result.exit_code == 0
+        assert "--cache-dir" in strip_ansi(result.output)
+
+    def test_process_index_empty_cache(self) -> None:
+        """Handles empty cache gracefully."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            output = Path(tmpdir) / "index.json"
+
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "index",
+                    "--cache-dir",
+                    str(cache_dir),
+                    "--output",
+                    str(output),
+                ],
+            )
+
+            assert result.exit_code == 0
+            assert "No cached cases" in result.output
+
+
+class TestProcessTranscripts:
+    """Tests for process transcripts command."""
+
+    def test_process_transcripts_help(self) -> None:
+        """Shows help for process transcripts."""
+        result = runner.invoke(app, ["process", "transcripts", "--help"])
+        assert result.exit_code == 0
+        assert "--cache-dir" in strip_ansi(result.output)
+        assert "--term" in strip_ansi(result.output)
+
+    def test_process_transcripts_empty_cache(self) -> None:
+        """Handles empty cache gracefully."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            output_dir = Path(tmpdir) / "transcripts"
+
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "transcripts",
+                    "--cache-dir",
+                    str(cache_dir),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+            )
+
+            assert result.exit_code == 0
+            assert "No cached transcripts" in result.output
 
 
 class TestProcessCases:
@@ -128,3 +211,46 @@ class TestProcessCases:
             assert result.exit_code == 0
             assert (output_dir / "2022" / "21-476.json").exists()
             assert (output_dir / "2021" / "20-123.json").exists()
+
+    def test_process_cases_with_term_filter(self) -> None:
+        """Filters to specific term."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            output_dir = Path(tmpdir) / "data"
+            raw_dir = cache_dir / "api.oyez.org" / "raw"
+            raw_dir.mkdir(parents=True)
+
+            # Create cases for multiple terms
+            for i, (docket, term) in enumerate(
+                [("21-476", "2022"), ("20-123", "2021")]
+            ):
+                case_data = {
+                    "ID": i,
+                    "name": f"Case {i}",
+                    "docket_number": docket,
+                    "term": term,
+                    "href": f"https://example.com/cases/{term}/{docket}",
+                    "timeline": [],
+                    "decisions": [],
+                    "oral_argument_audio": [],
+                    "opinion_announcement": [],
+                }
+                (raw_dir / f"case{i}.json").write_text(json.dumps(case_data))
+
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "cases",
+                    "--cache-dir",
+                    str(cache_dir),
+                    "--output-dir",
+                    str(output_dir),
+                    "--term",
+                    "2022",
+                ],
+            )
+
+            assert result.exit_code == 0
+            assert (output_dir / "2022" / "21-476.json").exists()
+            assert not (output_dir / "2021").exists()

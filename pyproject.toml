@@ -27,7 +27,7 @@ classifiers = [
 ]
 
 dynamic = [ "version" ]
-dependencies = [ "aiobotocore>=2.7", "av", "httpx", "numpy", "tqdm", "typer" ]
+dependencies = [ "aiobotocore>=2.7", "av", "httpx", "huggingface-hub>=0.20", "numpy", "pyarrow>=15", "tqdm", "typer" ]
 
 urls = { Homepage = "https://github.com/AlonKellner/oyez_sa_asr.git", Repository = "https://github.com/AlonKellner/oyez_sa_asr.git", Bugs = "https://github.com/AlonKellner/oyez_sa_asr/issues", Changelog = "https://github.com/AlonKellner/oyez_sa_asr/blob/main/CHANGELOG.md" }
 

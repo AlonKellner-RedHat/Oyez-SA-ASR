@@ -123,11 +123,14 @@ class ProcessedTurn:
         }
 
 
-def build_transcript_to_case_map(cases_dir: Path) -> dict[int, tuple[str, str]]:
+def build_transcript_to_case_map(
+    cases_dir: Path, terms: list[str] | None = None
+) -> dict[int, tuple[str, str]]:
     """Build a mapping from transcript IDs to case info.
 
     Args:
         cases_dir: Directory containing processed case files.
+        terms: Optional list of terms to filter by.
 
     Returns
     -------
@@ -138,8 +141,12 @@ def build_transcript_to_case_map(cases_dir: Path) -> dict[int, tuple[str, str]]:
     if not cases_dir.exists():
         return case_map
 
+    term_set = set(terms) if terms else None
+
     for term_dir in cases_dir.iterdir():
         if not term_dir.is_dir():
+            continue
+        if term_set and term_dir.name not in term_set:
             continue
 
         for case_file in term_dir.glob("*.json"):
@@ -164,11 +171,14 @@ def build_transcript_to_case_map(cases_dir: Path) -> dict[int, tuple[str, str]]:
     return case_map
 
 
-def extract_audio_urls(transcripts_dir: Path) -> list[str]:
+def extract_audio_urls(
+    transcripts_dir: Path, terms: list[str] | None = None
+) -> list[str]:
     """Extract all audio URLs from processed transcripts.
 
     Args:
         transcripts_dir: Directory containing processed transcript files.
+        terms: Optional list of terms to filter by.
 
     Returns
     -------
@@ -179,8 +189,12 @@ def extract_audio_urls(transcripts_dir: Path) -> list[str]:
     if not transcripts_dir.exists():
         return []
 
+    term_set = set(terms) if terms else None
+
     for term_dir in transcripts_dir.iterdir():
         if not term_dir.is_dir():
+            continue
+        if term_set and term_dir.name not in term_set:
             continue
 
         for docket_dir in term_dir.iterdir():

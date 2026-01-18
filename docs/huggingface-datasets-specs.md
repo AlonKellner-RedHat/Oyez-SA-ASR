@@ -23,18 +23,17 @@ oyez-sa-asr-raw/
 | Size | ~340 GB |
 | Updates | Append-only (yearly) |
 
-## Dataset 2: `oyez-sa-asr`
+## Dataset 2: `oyez-sa-asr-flex`
 
-Processed FLAC recordings with metadata references.
+Processed FLAC recordings with parquet metadata references.
+CLI: `oyez dataset flex`
 
 ```text
-oyez-sa-asr/
-├── audio/{term}/{docket}.flac   # 24-bit FLAC
+oyez-sa-asr-flex/
+├── audio/{term}/{docket}/*.flac   # 24-bit FLAC
 └── data/
-    ├── recordings.parquet       # Full recording metadata
-    ├── utterances.parquet       # Speaker turn refs (no audio)
-    ├── segments.parquet         # Fixed-length chunk refs
-    └── words.parquet            # Word-level alignments
+    ├── recordings.parquet         # Full recording metadata
+    └── utterances.parquet         # Speaker turn refs (no audio)
 ```
 
 ### Configs
@@ -43,30 +42,29 @@ oyez-sa-asr/
 |--------|-------------|-------|
 | `recordings` | Full oral arguments | File refs |
 | `utterances` | Speaker turns | Sliced on load |
-| `segments` | 30-sec chunks | Sliced on load |
-| `words` | Word alignments | None |
 
 ### Utterances Schema
 
 | Column | Type | Description |
 |--------|------|-------------|
-| audio_path | string | Reference to FLAC |
+| term | string | Court term |
+| docket | string | Docket number |
+| transcript_type | string | argument/opinion |
 | start_sec | float | Start timestamp |
 | end_sec | float | End timestamp |
 | text | string | Transcript |
-| speaker | string | Speaker name |
-| speaker_role | string | justice/advocate/other |
+| speaker_name | string | Speaker name |
+| speaker_id | int | Speaker ID |
 
-## Dataset 3: `oyez-sa-asr-stream`
+## Dataset 3: `oyez-sa-asr-simple`
 
 Embedded audio for zero-friction streaming access.
+CLI: `oyez dataset simple`
 
 ```text
-oyez-sa-asr-stream/
+oyez-sa-asr-simple/
 └── data/
-    ├── utterances/train-*.parquet   # Audio embedded
-    ├── segments_30s/train-*.parquet
-    └── segments_10s/train-*.parquet
+    └── utterances/train-*.parquet   # Audio embedded
 ```
 
 ### Utterances Schema
@@ -75,10 +73,11 @@ oyez-sa-asr-stream/
 |--------|------|-------------|
 | audio | Audio | Embedded FLAC bytes |
 | text | string | Transcript |
-| speaker | string | Speaker name |
-| speaker_role | string | Role category |
-| case_id | string | Docket number |
+| speaker_name | string | Speaker name |
 | term | string | Court term |
+| docket | string | Docket number |
+| start_sec | float | Start timestamp |
+| end_sec | float | End timestamp |
 
 ### Why Larger (~2× FLAC)
 

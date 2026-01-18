@@ -57,9 +57,17 @@ class AudioSource:
     ogg_path: Path | None = None
 
 
-def find_audio_sources(cache_dir: Path) -> dict[tuple[str, str, str], AudioSource]:
-    """Find and group audio files by (term, docket, recording_id)."""
+def find_audio_sources(
+    cache_dir: Path, terms: list[str] | None = None
+) -> dict[tuple[str, str, str], AudioSource]:
+    """Find and group audio files by (term, docket, recording_id).
+
+    Args:
+        cache_dir: Directory containing cached audio files.
+        terms: Optional list of terms to filter by.
+    """
     sources: dict[tuple[str, str, str], AudioSource] = {}
+    term_set = set(terms) if terms else None
 
     for fmt in ("mp3", "ogg"):
         pattern = f"oyez.case-media.{fmt}/case_data/**/*.{fmt}"
@@ -68,6 +76,11 @@ def find_audio_sources(cache_dir: Path) -> dict[tuple[str, str, str], AudioSourc
             if info is None:
                 continue
             term, docket = info
+
+            # Apply term filter
+            if term_set and term not in term_set:
+                continue
+
             rec_id = get_recording_id(path)
             key = (term, docket, rec_id)
 

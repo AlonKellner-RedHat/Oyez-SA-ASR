@@ -26,6 +26,8 @@ exclude = [
   'githubusercontent\.com',
   # Python f-strings that look like URLs
   'f".*"',
+  # Template URLs with placeholders (e.g., {repo_id})
+  'huggingface\.co/datasets/%7B',
 ]
 exclude_path = [
   "uv.lock",
