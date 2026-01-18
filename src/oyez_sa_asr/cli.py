@@ -10,6 +10,7 @@ from .cli_dataset import dataset_app
 from .cli_process import process_app
 from .cli_publish import publish_app
 from .cli_scrape import scrape_app
+from .cli_stats import stats_app
 
 app = typer.Typer()
 console = Console(force_terminal=True)
@@ -19,6 +20,7 @@ app.add_typer(process_app, name="process")
 app.add_typer(clear_app, name="clear")
 app.add_typer(dataset_app, name="dataset")
 app.add_typer(publish_app, name="publish")
+app.add_typer(stats_app, name="stats")
 
 
 @app.command()
