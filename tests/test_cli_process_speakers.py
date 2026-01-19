@@ -143,26 +143,26 @@ class TestProcessSpeakersBasic:
             output = _strip_ansi(result.output)
             assert "processed" in output.lower() or "done" in output.lower()
 
-            # Check output files exist
-            speaker_files = list(output_dir.glob("*.json"))
-            assert len(speaker_files) == 2
+            # Check output files exist in subdirectories
+            other_files = list((output_dir / "other").glob("*.json"))
+            assert len(other_files) == 2  # Both are "other" with few appearances
 
-            # Check Justice Smith file
-            smith_file = output_dir / "123_justice_smith.json"
+            # Check Justice Smith file (in other/ since only 1 case)
+            smith_file = output_dir / "other" / "123_justice_smith.json"
             assert smith_file.exists()
             with smith_file.open() as f:
                 smith_data = json.load(f)
             assert smith_data["id"] == 123
             assert smith_data["name"] == "Justice Smith"
-            assert smith_data["role"] == "justice"
+            assert smith_data["role"] == "other"  # Not enough cases to detect
             assert smith_data["totals"]["turns"] == 1
 
             # Check Mr. Jones file
-            jones_file = output_dir / "456_mr_jones.json"
+            jones_file = output_dir / "other" / "456_mr_jones.json"
             assert jones_file.exists()
             with jones_file.open() as f:
                 jones_data = json.load(f)
-            assert jones_data["role"] == "advocate"
+            assert jones_data["role"] == "other"
 
 
 class TestProcessSpeakersAggregation:
@@ -220,8 +220,8 @@ class TestProcessSpeakersAggregation:
 
             assert result.exit_code == 0
 
-            # Check aggregated totals
-            smith_file = output_dir / "123_justice_smith.json"
+            # Check aggregated totals (in other/ since only 2 cases)
+            smith_file = output_dir / "other" / "123_justice_smith.json"
             with smith_file.open() as f:
                 smith_data = json.load(f)
 
@@ -271,8 +271,8 @@ class TestProcessSpeakersTermFilter:
 
             assert result.exit_code == 0
 
-            # Check only 2024 data was processed
-            smith_file = output_dir / "123_justice_smith.json"
+            # Check only 2024 data was processed (in other/ since only 1 case)
+            smith_file = output_dir / "other" / "123_justice_smith.json"
             with smith_file.open() as f:
                 smith_data = json.load(f)
 

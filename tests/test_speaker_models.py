@@ -2,9 +2,11 @@
 """Tests for speaker_models module utilities."""
 
 from oyez_sa_asr.speaker_models import (
+    MIN_CASES_FOR_JUSTICE,
+    MIN_TERMS_FOR_JUSTICE,
     RecordingAppearance,
+    SpeakerProfile,
     TermStats,
-    detect_role,
     slugify_name,
 )
 
@@ -33,37 +35,69 @@ class TestSlugifyName:
         assert slugify_name("") == ""
 
 
-class TestDetectRole:
-    """Tests for detect_role function."""
+class TestAutoRoleDetection:
+    """Tests for automatic role detection based on appearance patterns."""
 
-    def test_chief_justice(self) -> None:
-        """Detect Chief Justice role."""
-        assert detect_role("Chief Justice John G. Roberts, Jr.") == "chief_justice"
+    def test_justice_detection_many_cases_many_terms(self) -> None:
+        """Detect justice with many cases across multiple terms."""
+        profile = SpeakerProfile(id=123, name="Test Justice")
 
-    def test_justice(self) -> None:
-        """Detect Justice role."""
-        assert detect_role("Justice Sonia Sotomayor") == "justice"
+        # Add appearances across multiple terms exceeding thresholds
+        # Need 200+ cases and 5+ terms
+        for term in ["2018", "2019", "2020", "2021", "2022", "2023"]:
+            for i in range(40):  # 40 cases per term = 240 total
+                profile.add_appearance(
+                    term=term,
+                    docket=f"{term[-2:]}-{i}",
+                    case_name=f"Case {i}",
+                    transcript_type="oral_argument",
+                    turns=5,
+                    duration_seconds=100.0,
+                    word_count=500,
+                )
 
-    def test_mr_advocate(self) -> None:
-        """Detect Mr. as advocate."""
-        assert detect_role("Mr. John Smith") == "advocate"
+        profile.finalize()
+        assert profile.role == "justice"
+        assert len(profile.cases) >= MIN_CASES_FOR_JUSTICE
+        assert len(profile._term_stats) >= MIN_TERMS_FOR_JUSTICE
 
-    def test_ms_advocate(self) -> None:
-        """Detect Ms. as advocate."""
-        assert detect_role("Ms. Jane Doe") == "advocate"
+    def test_other_detection_few_cases(self) -> None:
+        """Detect other (advocate) with few cases."""
+        profile = SpeakerProfile(id=456, name="Test Advocate")
 
-    def test_mrs_advocate(self) -> None:
-        """Detect Mrs. as advocate."""
-        assert detect_role("Mrs. Jane Smith") == "advocate"
+        # Add just a few appearances
+        for i in range(3):
+            profile.add_appearance(
+                term="2024",
+                docket=f"24-{i}",
+                case_name=f"Case {i}",
+                transcript_type="oral_argument",
+                turns=5,
+                duration_seconds=100.0,
+                word_count=500,
+            )
 
-    def test_unknown_role(self) -> None:
-        """Return unknown for unrecognized patterns."""
-        assert detect_role("John Smith") == "unknown"
+        profile.finalize()
+        assert profile.role == "other"
 
-    def test_case_insensitive(self) -> None:
-        """Role detection is case insensitive."""
-        assert detect_role("JUSTICE THOMAS") == "justice"
-        assert detect_role("chief justice roberts") == "chief_justice"
+    def test_other_detection_many_cases_one_term(self) -> None:
+        """Detect other when many cases but only one term."""
+        profile = SpeakerProfile(id=789, name="Frequent Single Term")
+
+        # Many cases but all in one term
+        for i in range(25):
+            profile.add_appearance(
+                term="2024",
+                docket=f"24-{i}",
+                case_name=f"Case {i}",
+                transcript_type="oral_argument",
+                turns=5,
+                duration_seconds=100.0,
+                word_count=500,
+            )
+
+        profile.finalize()
+        assert profile.role == "other"  # Only 1 term, not enough
 
 
 class TestTermStats:

@@ -7,6 +7,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+# Thresholds for automatic justice detection
+# Real justices appear in 400+ cases across many terms
+# Frequent advocates (like Solicitors General) max out around 100 cases
+MIN_CASES_FOR_JUSTICE = 200
+MIN_TERMS_FOR_JUSTICE = 5
+
 
 def slugify_name(name: str) -> str:
     """Convert speaker name to a URL-safe slug.
@@ -25,28 +31,6 @@ def slugify_name(name: str) -> str:
     # Replace spaces with underscores and collapse multiples
     slug = re.sub(r"\s+", "_", slug.strip())
     return slug.lower()
-
-
-def detect_role(name: str) -> str:
-    """Detect speaker role from name.
-
-    Args:
-        name: Speaker name like "Chief Justice John G. Roberts, Jr."
-
-    Returns
-    -------
-        Role: "chief_justice", "justice", "advocate", or "unknown"
-    """
-    name_lower = name.lower()
-
-    if name_lower.startswith("chief justice"):
-        return "chief_justice"
-    if name_lower.startswith("justice"):
-        return "justice"
-    if name_lower.startswith(("mr.", "ms.", "mrs.")):
-        return "advocate"
-
-    return "unknown"
 
 
 @dataclass
@@ -100,7 +84,7 @@ class SpeakerProfile:
     id: int
     name: str
     name_slug: str = field(init=False)
-    role: str = field(init=False)
+    role: str = field(init=False, default="other")
     first_appearance: str | None = None
     last_appearance: str | None = None
     recordings: list[RecordingAppearance] = field(default_factory=list)
@@ -110,7 +94,7 @@ class SpeakerProfile:
     def __post_init__(self) -> None:
         """Initialize derived fields."""
         self.name_slug = slugify_name(self.name)
-        self.role = detect_role(self.name)
+        # Role will be determined after all appearances are added
 
     def add_appearance(
         self,
@@ -154,6 +138,30 @@ class SpeakerProfile:
         if self.last_appearance is None or date_str > self.last_appearance:
             self.last_appearance = date_str
 
+    def detect_role(self) -> str:
+        """Detect role based on appearance patterns.
+
+        Justices appear in many cases across multiple terms.
+        Advocates typically appear in just a few cases.
+
+        Returns
+        -------
+            "justice" if speaker meets thresholds, otherwise "other"
+        """
+        num_cases = len(self.cases)
+        num_terms = len(self._term_stats)
+
+        if num_cases >= MIN_CASES_FOR_JUSTICE and num_terms >= MIN_TERMS_FOR_JUSTICE:
+            return "justice"
+        return "other"
+
+    def finalize(self) -> None:
+        """Finalize the profile after all appearances have been added.
+
+        This determines the role based on collected data.
+        """
+        self.role = self.detect_role()
+
     def get_totals(self) -> dict[str, Any]:
         """Get aggregated totals across all recordings."""
         total_turns = sum(r.turns for r in self.recordings)
@@ -179,6 +187,10 @@ class SpeakerProfile:
         """Get the filename for this speaker's JSON file."""
         return f"{self.id}_{self.name_slug}.json"
 
+    def get_subdir(self) -> str:
+        """Get the subdirectory for this speaker based on role."""
+        return "justices" if self.role == "justice" else "other"
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to full dictionary for JSON serialization."""
         return {
@@ -195,9 +207,14 @@ class SpeakerProfile:
         }
 
     def save(self, output_dir: Path) -> Path:
-        """Save speaker profile to JSON file."""
-        output_dir.mkdir(parents=True, exist_ok=True)
-        output_path = output_dir / self.get_filename()
+        """Save speaker profile to JSON file in role-based subdirectory.
+
+        Automatically finalizes the profile (detects role) before saving.
+        """
+        self.finalize()
+        subdir = output_dir / self.get_subdir()
+        subdir.mkdir(parents=True, exist_ok=True)
+        output_path = subdir / self.get_filename()
         with output_path.open("w") as f:
             json.dump(self.to_dict(), f, indent=2)
         return output_path

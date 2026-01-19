@@ -22,13 +22,13 @@ def _create_speaker_file(
     output_dir: Path,
     speaker_id: int,
     name: str,
-    role: str = "justice",
+    role: str = "other",
     recordings: int = 10,
     turns: int = 100,
     duration: float = 1000.0,
     words: int = 5000,
 ) -> Path:
-    """Create a mock speaker file."""
+    """Create a mock speaker file in role-based subdirectory."""
     name_slug = name.lower().replace(" ", "_").replace(".", "").replace(",", "")
     data = {
         "id": speaker_id,
@@ -56,8 +56,10 @@ def _create_speaker_file(
         "recordings": [],
         "cases": [],
     }
-    output_dir.mkdir(parents=True, exist_ok=True)
-    file_path = output_dir / f"{speaker_id}_{name_slug}.json"
+    subdir = "justices" if role == "justice" else "other"
+    target_dir = output_dir / subdir
+    target_dir.mkdir(parents=True, exist_ok=True)
+    file_path = target_dir / f"{speaker_id}_{name_slug}.json"
     file_path.write_text(json.dumps(data))
     return file_path
 
@@ -66,7 +68,7 @@ class TestStatsSpeakersHelp:
     """Tests for help output."""
 
     def test_help(self) -> None:
-        """Shows help message."""
+        """Show help message."""
         result = runner.invoke(app, ["stats", "speakers", "--help"])
         assert result.exit_code == 0
         assert "speakers" in result.output.lower()
@@ -76,7 +78,7 @@ class TestStatsSpeakersMissingData:
     """Tests for missing data handling."""
 
     def test_missing_speakers_dir(self) -> None:
-        """Fails gracefully when speakers directory doesn't exist."""
+        """Fail gracefully when speakers directory doesn't exist."""
         with tempfile.TemporaryDirectory() as tmpdir:
             result = runner.invoke(
                 app,
@@ -87,7 +89,7 @@ class TestStatsSpeakersMissingData:
             assert "not found" in output.lower()
 
     def test_no_speakers_found(self) -> None:
-        """Shows message when no speakers found."""
+        """Show message when no speakers found."""
         with tempfile.TemporaryDirectory() as tmpdir:
             data_dir = Path(tmpdir)
             (data_dir / "speakers").mkdir()
@@ -104,30 +106,16 @@ class TestStatsSpeakersDisplay:
     """Tests for statistics display."""
 
     def test_displays_basic_stats(self) -> None:
-        """Displays basic speaker statistics."""
+        """Display basic speaker statistics."""
         with tempfile.TemporaryDirectory() as tmpdir:
             data_dir = Path(tmpdir)
             speakers_dir = data_dir / "speakers"
 
             _create_speaker_file(
-                speakers_dir,
-                speaker_id=123,
-                name="Justice Smith",
-                role="justice",
-                recordings=10,
-                turns=100,
-                duration=1000.0,
-                words=5000,
+                speakers_dir, 123, "Justice Smith", "justice", 10, 100, 1000.0, 5000
             )
             _create_speaker_file(
-                speakers_dir,
-                speaker_id=456,
-                name="Mr. Jones",
-                role="advocate",
-                recordings=5,
-                turns=50,
-                duration=500.0,
-                words=2500,
+                speakers_dir, 456, "Mr. Jones", "advocate", 5, 50, 500.0, 2500
             )
 
             result = runner.invoke(
@@ -142,29 +130,15 @@ class TestStatsSpeakersDisplay:
             assert "advocate" in output.lower()
 
     def test_displays_top_speakers(self) -> None:
-        """Displays top speakers by turn count."""
+        """Display top speakers by turn count."""
         with tempfile.TemporaryDirectory() as tmpdir:
             data_dir = Path(tmpdir)
             speakers_dir = data_dir / "speakers"
 
+            _create_speaker_file(speakers_dir, 123, "Justice Smith", turns=500)
+            _create_speaker_file(speakers_dir, 456, "Justice Jones", turns=300)
             _create_speaker_file(
-                speakers_dir,
-                speaker_id=123,
-                name="Justice Smith",
-                turns=500,
-            )
-            _create_speaker_file(
-                speakers_dir,
-                speaker_id=456,
-                name="Justice Jones",
-                turns=300,
-            )
-            _create_speaker_file(
-                speakers_dir,
-                speaker_id=789,
-                name="Mr. Advocate",
-                role="advocate",
-                turns=100,
+                speakers_dir, 789, "Mr. Advocate", "advocate", turns=100
             )
 
             result = runner.invoke(
@@ -177,46 +151,33 @@ class TestStatsSpeakersDisplay:
             assert "Justice Jones" in output
 
     def test_term_filter(self) -> None:
-        """Filters speakers by term."""
+        """Filter speakers by term."""
         with tempfile.TemporaryDirectory() as tmpdir:
             data_dir = Path(tmpdir)
-            speakers_dir = data_dir / "speakers"
+            speakers_dir = data_dir / "speakers" / "other"
+            speakers_dir.mkdir(parents=True)
 
-            # Create speaker with data in multiple terms
             speaker_data = {
                 "id": 123,
-                "name": "Justice Smith",
-                "name_slug": "justice_smith",
-                "role": "justice",
-                "first_appearance": "2023-10-05",
-                "last_appearance": "2024-01-15",
-                "totals": {
-                    "recordings": 20,
-                    "cases": 20,
-                    "turns": 200,
-                    "duration_seconds": 2000.0,
-                    "word_count": 10000,
-                    "avg_words_per_turn": 50.0,
-                },
+                "name": "Test Speaker",
+                "name_slug": "test_speaker",
+                "role": "other",
+                "totals": {"recordings": 20, "turns": 200, "duration_seconds": 2000.0},
                 "by_term": {
                     "2023": {
                         "recordings": 10,
                         "turns": 100,
                         "duration_seconds": 1000.0,
-                        "word_count": 5000,
                     },
                     "2024": {
                         "recordings": 10,
                         "turns": 100,
                         "duration_seconds": 1000.0,
-                        "word_count": 5000,
                     },
                 },
                 "recordings": [],
-                "cases": ["2023/docket1", "2024/docket2"],
             }
-            speakers_dir.mkdir(parents=True)
-            (speakers_dir / "123_justice_smith.json").write_text(
+            (speakers_dir / "123_test_speaker.json").write_text(
                 json.dumps(speaker_data)
             )
 
@@ -227,5 +188,4 @@ class TestStatsSpeakersDisplay:
             output = _strip_ansi(result.output)
 
             assert result.exit_code == 0
-            # Stats should only reflect 2024 term
-            assert "100" in output  # turns from 2024 only
+            assert "100" in output
