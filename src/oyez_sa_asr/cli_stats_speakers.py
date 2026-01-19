@@ -114,8 +114,20 @@ def _print_recording_distribution(dist: Counter[str], total: int) -> None:
 
 def _print_hours_distribution(dist: Counter[str], total: int) -> None:
     """Print speaker distribution by hours spoken."""
-    console.print("[bold]Speakers by hours spoken:[/bold]")
-    bucket_order = ["<1h", "1-2h", "2-5h", "5-10h", "10-50h", "50-100h", "100h+"]
+    console.print("[bold]Speakers by time spoken:[/bold]")
+    bucket_order = [
+        "<1m",
+        "1-5m",
+        "5-15m",
+        "15-30m",
+        "30-60m",
+        "1-2h",
+        "2-5h",
+        "5-10h",
+        "10-50h",
+        "50-100h",
+        "100h+",
+    ]
     for bucket in bucket_order:
         count = dist.get(bucket, 0)
         if count > 0:

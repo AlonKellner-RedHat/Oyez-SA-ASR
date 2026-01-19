@@ -28,18 +28,22 @@ def _get_recording_bucket(num_recordings: int) -> str:
 
 
 def _get_hours_bucket(duration_seconds: float) -> str:
-    """Get the distribution bucket for spoken hours."""
-    hours = duration_seconds / 3600
+    """Get the distribution bucket for time spoken."""
+    minutes = duration_seconds / 60
     thresholds = [
-        (1, "<1h"),
-        (2, "1-2h"),
-        (5, "2-5h"),
-        (10, "5-10h"),
-        (50, "10-50h"),
-        (100, "50-100h"),
+        (1, "<1m"),
+        (5, "1-5m"),
+        (15, "5-15m"),
+        (30, "15-30m"),
+        (60, "30-60m"),
+        (120, "1-2h"),
+        (300, "2-5h"),
+        (600, "5-10h"),
+        (3000, "10-50h"),
+        (6000, "50-100h"),
     ]
     for threshold, label in thresholds:
-        if hours < threshold:
+        if minutes < threshold:
             return label
     return "100h+"
 

@@ -131,19 +131,21 @@ class TestHoursDistribution:
     """Tests for hours spoken distribution."""
 
     def test_displays_hours_distribution(self) -> None:
-        """Display speaker distribution by hours spoken."""
+        """Display speaker distribution by time spoken."""
         with tempfile.TemporaryDirectory() as tmpdir:
             data_dir = Path(tmpdir)
             speakers_dir = data_dir / "speakers"
 
-            # <1h (1800 sec = 0.5h)
-            _create_speaker_file(speakers_dir, 1, "Brief Speaker", duration=1800.0)
+            # <1m (30 sec)
+            _create_speaker_file(speakers_dir, 1, "Very Brief", duration=30.0)
+            # 5-15m (600 sec = 10m)
+            _create_speaker_file(speakers_dir, 2, "Brief Speaker", duration=600.0)
+            # 30-60m (2400 sec = 40m)
+            _create_speaker_file(speakers_dir, 3, "Medium Speaker", duration=2400.0)
             # 1-2h (5400 sec = 1.5h)
-            _create_speaker_file(speakers_dir, 2, "Medium Speaker", duration=5400.0)
-            # 2-5h (10800 sec = 3h)
-            _create_speaker_file(speakers_dir, 3, "Long Speaker", duration=10800.0)
+            _create_speaker_file(speakers_dir, 4, "Long Speaker", duration=5400.0)
             # 100h+ (400000 sec = 111h)
-            _create_speaker_file(speakers_dir, 4, "Very Long", duration=400000.0)
+            _create_speaker_file(speakers_dir, 5, "Very Long", duration=400000.0)
 
             result = runner.invoke(
                 app, ["stats", "speakers", "--data-dir", str(data_dir)]
@@ -151,10 +153,11 @@ class TestHoursDistribution:
             output = _strip_ansi(result.output)
 
             assert result.exit_code == 0
-            assert "Speakers by hours spoken" in output
-            assert "<1h:" in output
+            assert "Speakers by time spoken" in output
+            assert "<1m:" in output
+            assert "5-15m:" in output
+            assert "30-60m:" in output
             assert "1-2h:" in output
-            assert "2-5h:" in output
             assert "100h+:" in output
 
     def test_displays_role_hours_breakdown(self) -> None:
