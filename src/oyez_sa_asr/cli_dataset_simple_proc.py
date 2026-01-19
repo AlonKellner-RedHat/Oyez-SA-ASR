@@ -6,7 +6,7 @@ Contains the parallel processing logic for embedding audio segments.
 
 import logging
 from collections import defaultdict
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import BrokenExecutor, ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +15,9 @@ from tqdm import tqdm
 from .audio_segment import extract_segments_batch
 
 logger = logging.getLogger(__name__)
+
+# Default to half of CPU count to avoid memory exhaustion
+DEFAULT_MAX_WORKERS = 4
 
 
 def group_utterances_by_recording(
@@ -39,6 +42,7 @@ def process_single_recording(
     """Process a single recording and return embedded rows.
 
     This function is designed to be called in parallel processes.
+    It catches all exceptions to prevent worker crashes.
 
     Args:
         args: Tuple of (key, utterances, audio_path) where key is (term, docket).
@@ -49,6 +53,20 @@ def process_single_recording(
     """
     key, rec_utterances, audio_path = args
 
+    try:
+        return _process_single_recording_impl(key, rec_utterances, audio_path)
+    except Exception as e:
+        # Catch ALL exceptions to prevent worker crashes
+        logger.exception("Worker crashed processing %s: %s", audio_path, e)
+        return [], len(rec_utterances)
+
+
+def _process_single_recording_impl(
+    key: tuple[str, str],
+    rec_utterances: list[dict[str, Any]],
+    audio_path: Path,
+) -> tuple[list[dict[str, Any]], int]:
+    """Process a single recording (implementation)."""
     # Filter out utterances with missing or invalid time ranges
     valid_utterances = []
     segments = []
@@ -143,7 +161,23 @@ def process_by_recording(
 
         with tqdm(total=len(futures), desc="Recordings", unit="rec") as pbar:
             for future in as_completed(futures):
-                rows, errors = future.result()
+                try:
+                    rows, errors = future.result()
+                except BrokenExecutor as e:
+                    # Worker process crashed - log and continue
+                    item = futures[future]
+                    logger.error("Worker crashed processing %s: %s", item[2], e)
+                    error_count += len(item[1])
+                    pbar.update(1)
+                    continue
+                except Exception as e:
+                    # Unexpected error
+                    item = futures[future]
+                    logger.exception("Error processing %s: %s", item[2], e)
+                    error_count += len(item[1])
+                    pbar.update(1)
+                    continue
+
                 error_count += errors
 
                 for row in rows:
