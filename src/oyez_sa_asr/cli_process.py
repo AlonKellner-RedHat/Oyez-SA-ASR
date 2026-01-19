@@ -10,6 +10,7 @@ from rich.console import Console
 from tqdm import tqdm
 
 from .cli_process_audio import add_audio_command
+from .cli_process_speakers import add_speakers_command
 from .scraper import parse_cached_cases
 from .scraper.parser_cases import ProcessedCase
 from .scraper.parser_transcripts import (
@@ -32,6 +33,9 @@ console = Console(force_terminal=True)
 
 # Add audio command from separate module
 add_audio_command(process_app)
+
+# Add speakers command from separate module
+add_speakers_command(process_app)
 
 
 @process_app.command(name="index")

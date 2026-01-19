@@ -12,6 +12,7 @@ from rich.console import Console
 
 from .cli_dataset_helpers import collect_recordings
 from .cli_stats_cases import register_cases_command
+from .cli_stats_speakers import add_stats_speakers_command
 from .term_filter import filter_dirs
 
 stats_app = typer.Typer(help="Display statistics for processed data")
@@ -19,6 +20,9 @@ console = Console(force_terminal=True)
 
 # Register the cases command
 register_cases_command(stats_app)
+
+# Register the speakers command
+add_stats_speakers_command(stats_app)
 
 
 def _format_size(size_bytes: int) -> str:

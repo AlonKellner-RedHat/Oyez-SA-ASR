@@ -32,6 +32,11 @@ CLEAR_TARGETS: dict[str, ClearTarget] = {
     "audio": ClearTarget("audio", Path(".cache/audio"), None),  # Cache-only
 }
 
+# Data-only targets (no cache directory)
+DATA_ONLY_TARGETS: dict[str, Path] = {
+    "speakers": Path("data/speakers"),
+}
+
 
 def _clear_directory(path: Path, name: str) -> int:
     """Delete a directory and return the count of items removed."""
@@ -124,6 +129,42 @@ def _create_clear_command(target: ClearTarget) -> None:
         _make_clear_cache_only(target.name, target.cache_dir)
 
 
+def _make_clear_data_only(name: str, default_data: Path) -> None:
+    """Create a clear command for data-only targets (no cache)."""
+
+    @clear_app.command(name=name)
+    def cmd(
+        data_dir: Annotated[
+            Path,
+            typer.Option("--data-dir", "-d", help="Data directory to clear"),
+        ] = default_data,
+        force: Annotated[
+            bool,
+            typer.Option("--force", "-f", help="Skip confirmation prompt"),
+        ] = False,
+    ) -> None:
+        console.print(f"[bold]Clearing {name} data[/bold]")
+        console.print(f"  Data dir: {data_dir}")
+        console.print()
+
+        if not force:
+            confirm = typer.confirm("Are you sure you want to delete this data?")
+            if not confirm:
+                console.print("[yellow]Cancelled[/yellow]")
+                raise typer.Exit(0)
+
+        total = _clear_directory(data_dir, "Data")
+
+        console.print()
+        console.print(f"[bold green]Done![/bold green] Removed {total} files.")
+
+    cmd.__doc__ = f"Clear {name} data."
+
+
 # Register all clear commands
 for _target in CLEAR_TARGETS.values():
     _create_clear_command(_target)
+
+# Register data-only clear commands
+for _name, _path in DATA_ONLY_TARGETS.items():
+    _make_clear_data_only(_name, _path)
