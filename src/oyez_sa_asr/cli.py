@@ -7,6 +7,7 @@ from rich.console import Console
 from ._example import example
 from .cli_clear import clear_app
 from .cli_dataset import dataset_app
+from .cli_pipeline import register_pipeline_command
 from .cli_process import process_app
 from .cli_publish import publish_app
 from .cli_scrape import scrape_app
@@ -21,6 +22,7 @@ app.add_typer(clear_app, name="clear")
 app.add_typer(dataset_app, name="dataset")
 app.add_typer(publish_app, name="publish")
 app.add_typer(stats_app, name="stats")
+register_pipeline_command(app)
 
 
 @app.command()
