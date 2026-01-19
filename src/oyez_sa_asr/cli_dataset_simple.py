@@ -6,7 +6,6 @@ utterances from that recording before moving on.
 """
 
 import json
-import os
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -63,9 +62,7 @@ def dataset_simple(
     ] = 500,
     workers: Annotated[
         int | None,
-        typer.Option(
-            "--workers", "-w", help="Parallel workers (default: min(CPU/2, 4))"
-        ),
+        typer.Option("--workers", "-w", help="Parallel workers (default: 1)"),
     ] = None,
     force: Annotated[
         bool,
@@ -75,12 +72,8 @@ def dataset_simple(
     """Create oyez-sa-asr-simple dataset with embedded audio."""
     pa, pq = require_pyarrow()
 
-    # Default to half CPU count (max 4) to avoid memory exhaustion
-    if workers is not None:
-        num_workers = workers
-    else:
-        cpu_count = os.cpu_count() or 2
-        num_workers = min(cpu_count // 2, 4) or 1
+    # Default to 1 worker to avoid OOM on memory-constrained systems
+    num_workers = workers if workers is not None else 1
 
     console.print("[bold]Creating oyez-sa-asr-simple dataset[/bold]")
     console.print(f"  Flex dir: {flex_dir}")
