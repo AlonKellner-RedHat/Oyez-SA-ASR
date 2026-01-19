@@ -125,3 +125,86 @@ class TestTopByRole:
             assert "Top 10 others by recordings" in output
             assert "Justice Alpha - 100 recordings" in output
             assert "Advocate Gamma - 30 recordings" in output
+
+
+class TestHoursDistribution:
+    """Tests for hours spoken distribution."""
+
+    def test_displays_hours_distribution(self) -> None:
+        """Display speaker distribution by hours spoken."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir)
+            speakers_dir = data_dir / "speakers"
+
+            # <1h (1800 sec = 0.5h)
+            _create_speaker_file(speakers_dir, 1, "Brief Speaker", duration=1800.0)
+            # 1-2h (5400 sec = 1.5h)
+            _create_speaker_file(speakers_dir, 2, "Medium Speaker", duration=5400.0)
+            # 2-5h (10800 sec = 3h)
+            _create_speaker_file(speakers_dir, 3, "Long Speaker", duration=10800.0)
+            # 100h+ (400000 sec = 111h)
+            _create_speaker_file(speakers_dir, 4, "Very Long", duration=400000.0)
+
+            result = runner.invoke(
+                app, ["stats", "speakers", "--data-dir", str(data_dir)]
+            )
+            output = _strip_ansi(result.output)
+
+            assert result.exit_code == 0
+            assert "Speakers by hours spoken" in output
+            assert "<1h:" in output
+            assert "1-2h:" in output
+            assert "2-5h:" in output
+            assert "100h+:" in output
+
+    def test_displays_role_hours_breakdown(self) -> None:
+        """Display spoken hours breakdown by role."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir)
+            speakers_dir = data_dir / "speakers"
+
+            # 10h for justice
+            _create_speaker_file(
+                speakers_dir, 1, "Justice A", role="justice", duration=36000.0
+            )
+            # 5h for other
+            _create_speaker_file(
+                speakers_dir, 2, "Other B", role="other", duration=18000.0
+            )
+
+            result = runner.invoke(
+                app, ["stats", "speakers", "--data-dir", str(data_dir)]
+            )
+            output = _strip_ansi(result.output)
+
+            assert result.exit_code == 0
+            assert "Spoken hours by role" in output
+            assert "Justices:" in output
+            assert "Others:" in output
+
+    def test_displays_top_by_hours(self) -> None:
+        """Display top speakers by hours spoken, separated by role."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir)
+            speakers_dir = data_dir / "speakers"
+
+            _create_speaker_file(
+                speakers_dir, 1, "Justice Alpha", role="justice", duration=100000.0
+            )
+            _create_speaker_file(
+                speakers_dir, 2, "Justice Beta", role="justice", duration=50000.0
+            )
+            _create_speaker_file(
+                speakers_dir, 3, "Advocate Gamma", role="advocate", duration=30000.0
+            )
+
+            result = runner.invoke(
+                app, ["stats", "speakers", "--data-dir", str(data_dir)]
+            )
+            output = _strip_ansi(result.output)
+
+            assert result.exit_code == 0
+            assert "Top 10 justices by hours spoken" in output
+            assert "Top 10 others by hours spoken" in output
+            assert "Justice Alpha" in output
+            assert "Advocate Gamma" in output
