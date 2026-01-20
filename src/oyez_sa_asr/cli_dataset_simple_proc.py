@@ -14,11 +14,14 @@ from typing import Any
 from tqdm import tqdm
 
 from .audio_segment import extract_segments_batch
+from .memory_utils import (
+    check_oom,
+    get_memory_usage_mb,
+    get_oom_kill_count,
+    kill_orphan_forkservers,
+)
 
 logger = logging.getLogger(__name__)
-
-# Default to half of CPU count to avoid memory exhaustion
-DEFAULT_MAX_WORKERS = 4
 
 
 def group_utterances_by_recording(
@@ -126,6 +129,44 @@ def _build_work_items(
     return work_items, skipped_count
 
 
+class _ShardWriter:
+    """Encapsulates shard writing state and logic."""
+
+    def __init__(self, data_dir: Path, target_bytes: int, pa: Any, pq: Any) -> None:
+        self.data_dir = data_dir
+        self.target_bytes = target_bytes
+        self.pa = pa
+        self.pq = pq
+        self.current_shard: list[dict[str, Any]] = []
+        self.current_size = 0
+        self.shard_num = 0
+        self.recs_in_shard = 0
+
+    def add_row(self, row: dict[str, Any]) -> None:
+        """Add a row to the current shard."""
+        self.current_shard.append(row)
+        self.current_size += len(row["audio"]["bytes"])
+
+    def maybe_flush(self) -> None:
+        """Flush shard if size or recording count threshold reached."""
+        self.recs_in_shard += 1
+        if self.current_size >= self.target_bytes or self.recs_in_shard >= 5:
+            self.flush()
+
+    def flush(self) -> None:
+        """Write current shard to disk and reset state."""
+        if self.current_shard:
+            self.pq.write_table(
+                self.pa.Table.from_pylist(self.current_shard),
+                self.data_dir / f"train-{self.shard_num:05d}.parquet",
+            )
+            self.shard_num += 1
+            self.current_shard = []
+            self.current_size = 0
+            self.recs_in_shard = 0
+            gc.collect()
+
+
 def process_by_recording(
     utterances: list[dict[str, Any]],
     audio_paths: dict[tuple[str, str], Path],
@@ -135,75 +176,72 @@ def process_by_recording(
     pq: Any,
     workers: int = 1,
 ) -> dict[str, int]:
-    """Process utterances grouped by recording for efficiency.
+    """Process utterances grouped by recording for efficiency."""
+    kill_orphan_forkservers()
 
-    Reads each audio file ONCE and extracts all segments from it,
-    avoiding redundant file reads. Uses parallel processing for speed.
+    initial_oom = get_oom_kill_count()
+    used_mb, available_mb, _ = get_memory_usage_mb()
+    logger.info(
+        "Starting processing: %d MB used, %d MB available, %d workers",
+        used_mb,
+        available_mb,
+        workers,
+    )
 
-    Note
-    ----
-        Shard contents are non-deterministic due to parallel processing
-        completion order. This is acceptable for ML training data.
-    """
     data_dir = output_dir / "data" / "utterances"
     data_dir.mkdir(parents=True, exist_ok=True)
-    target_bytes = shard_size_mb * 1024 * 1024
 
     work_items, skipped_count = _build_work_items(utterances, audio_paths)
+    writer = _ShardWriter(data_dir, shard_size_mb * 1024 * 1024, pa, pq)
 
-    # Shard state
-    current_shard: list[dict[str, Any]] = []
-    current_size = 0
-    shard_num = 0
-    recs_in_shard = 0
     embedded_count = 0
     error_count = 0
+    last_path: Path | None = None
 
-    def _write_shard() -> None:
-        nonlocal current_shard, current_size, shard_num, recs_in_shard
-        if current_shard:
-            pq.write_table(
-                pa.Table.from_pylist(current_shard),
-                data_dir / f"train-{shard_num:05d}.parquet",
-            )
-            shard_num += 1
-            current_shard = []
-            current_size = 0
-            recs_in_shard = 0
-            gc.collect()
-
-    with ProcessPoolExecutor(max_workers=workers) as executor:
+    executor = None
+    try:
+        executor = ProcessPoolExecutor(max_workers=workers)
         futures = {
             executor.submit(process_single_recording, item): item for item in work_items
         }
         with tqdm(total=len(futures), desc="Recordings", unit="rec") as pbar:
             for future in as_completed(futures):
+                item = futures[future]
+                last_path = item[2]
                 rows, errors = _handle_future(future, futures)
                 if rows is None:
                     error_count += errors
+                    check_oom(initial_oom, last_path)
                     pbar.update(1)
                     continue
 
                 error_count += errors
                 for row in rows:
-                    current_shard.append(row)
-                    current_size += len(row["audio"]["bytes"])
+                    writer.add_row(row)
                     embedded_count += 1
 
-                recs_in_shard += 1
-                if current_size >= target_bytes or recs_in_shard >= 5:
-                    _write_shard()
-
+                writer.maybe_flush()
                 del rows
                 gc.collect()
                 pbar.update(1)
 
-    _write_shard()
+        writer.flush()
+    except BrokenExecutor as e:
+        check_oom(initial_oom, last_path)
+        logger.error(
+            "ProcessPool crashed (likely OOM). Last: %s. Error: %s", last_path, e
+        )
+        raise
+    finally:
+        if executor is not None:
+            executor.shutdown(wait=False, cancel_futures=True)
+        check_oom(initial_oom, last_path)
+
     return {
         "embedded": embedded_count,
         "skipped": skipped_count,
         "errors": error_count,
-        "shards": shard_num,
+        "shards": writer.shard_num,
     }
 
 

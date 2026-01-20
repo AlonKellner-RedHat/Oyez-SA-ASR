@@ -8,11 +8,13 @@ Optimized with memory-efficient streaming extraction (Option C):
 """
 
 import json
+import logging
 from pathlib import Path
 from typing import Annotated, Any
 
 import typer
 from rich.console import Console
+from rich.logging import RichHandler
 
 from .cli_dataset_helpers import require_pyarrow
 from .cli_dataset_simple_proc import group_utterances_by_recording, process_by_recording
@@ -26,6 +28,15 @@ from .cli_dataset_state import (
 )
 
 console = Console(force_terminal=True)
+
+# Configure logging with rich output
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(message)s",
+    datefmt="[%X]",
+    handlers=[RichHandler(console=console, show_path=False, rich_tracebacks=True)],
+)
+logger = logging.getLogger(__name__)
 
 
 # Re-export for backward compatibility with tests
@@ -146,13 +157,13 @@ def dataset_simple(
         ),
     ] = 100,
     workers: Annotated[
-        int | None,
+        int,
         typer.Option(
             "--workers",
             "-w",
-            help="Parallel workers (default: 4, safe with streaming extraction)",
+            help="Parallel workers (default: 1, increase with caution - may OOM)",
         ),
-    ] = None,
+    ] = 1,
     force: Annotated[
         bool,
         typer.Option("--force", "-F", help="Force regeneration if output exists"),
@@ -165,7 +176,7 @@ def dataset_simple(
     at a time using PyAV seeking to extract only needed segments.
     """
     pa, pq = require_pyarrow()
-    num_workers = workers if workers is not None else 4
+    num_workers = workers
 
     console.print("[bold]Creating oyez-sa-asr-simple dataset[/bold]")
     console.print(f"  Flex dir: {flex_dir}")
@@ -173,6 +184,11 @@ def dataset_simple(
     if terms:
         console.print(f"  Terms: {', '.join(terms)}")
     console.print(f"  Shard size: {shard_size_mb} MB, Workers: {num_workers}")
+    if num_workers > 1:
+        console.print(
+            "  [yellow]Warning:[/yellow] Multiple workers may cause OOM on "
+            "large datasets. Use --workers 1 if process is killed."
+        )
     console.print()
 
     utterances_pq, audio_dir = _validate_flex_dataset(flex_dir)
@@ -191,9 +207,21 @@ def dataset_simple(
 
     console.print("Embedding audio segments and writing shards...")
     console.print(f"  Recordings: {len(audio_paths)}")
-    stats = process_by_recording(
-        utterances, audio_paths, output_dir, shard_size_mb, pa, pq, num_workers
-    )
+    try:
+        stats = process_by_recording(
+            utterances, audio_paths, output_dir, shard_size_mb, pa, pq, num_workers
+        )
+    except Exception as e:
+        console.print()
+        console.print("[bold red]Error: Processing failed![/bold red]")
+        console.print(f"  {type(e).__name__}: {e}")
+        console.print()
+        console.print("[yellow]This is often caused by Out-Of-Memory (OOM).[/yellow]")
+        console.print("Try running with fewer workers:")
+        console.print(
+            f"  oyez dataset simple --workers 1 --term {' --term '.join(terms or ['<term>'])}"
+        )
+        raise typer.Exit(1) from e
     console.print(
         f"  Embedded {stats['embedded']} utterances, skipped {stats['skipped']}"
     )
