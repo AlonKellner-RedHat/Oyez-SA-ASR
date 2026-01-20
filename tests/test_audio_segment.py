@@ -20,10 +20,9 @@ def _create_test_audio(duration_sec: float, sample_rate: int = 16000) -> Path:
     with tempfile.NamedTemporaryFile(suffix=".flac", delete=False) as tmpfile:
         path = Path(tmpfile.name)
 
-    # Create a simple sine wave at 440 Hz
     t = np.linspace(0, duration_sec, int(duration_sec * sample_rate), dtype=np.float32)
-    samples = np.sin(2 * np.pi * 440 * t) * 0.5  # 440 Hz sine wave at 50% volume
-    samples = samples[np.newaxis, :]  # Shape: (1, num_samples)
+    samples = np.sin(2 * np.pi * 440 * t) * 0.5
+    samples = samples[np.newaxis, :]
 
     save_audio(samples, sample_rate, path, format="flac", bits_per_sample=16)
     return path
@@ -40,15 +39,13 @@ class TestExtractSegment:
             assert isinstance(segment_bytes, bytes)
             assert len(segment_bytes) > 0
 
-            # Save and reload to verify it's valid FLAC
             with tempfile.NamedTemporaryFile(suffix=".flac", delete=False) as f:
                 f.write(segment_bytes)
                 segment_path = Path(f.name)
 
             audio, sr = load_audio(segment_path)
-            # Should be approximately 3 seconds
             expected_samples = 3.0 * sr
-            assert abs(audio.shape[1] - expected_samples) < sr * 0.1  # 100ms tolerance
+            assert abs(audio.shape[1] - expected_samples) < sr * 0.1
             segment_path.unlink()
         finally:
             path.unlink()
@@ -94,7 +91,6 @@ class TestExtractSegment:
         path = _create_test_audio(3.0)
         try:
             segment_bytes = extract_segment(path, start_sec=1.0, end_sec=2.0)
-            # FLAC files start with "fLaC" magic bytes
             assert segment_bytes[:4] == b"fLaC"
         finally:
             path.unlink()
@@ -104,7 +100,7 @@ class TestExtractSegmentValidation:
     """Tests for segment extraction validation."""
 
     def test_rejects_invalid_time_range(self) -> None:
-        """Raises ValueError when start_sec >= end_sec."""
+        """Raise ValueError when start_sec >= end_sec."""
         path = _create_test_audio(5.0)
         try:
             with pytest.raises(ValueError, match="must be <"):
@@ -113,7 +109,7 @@ class TestExtractSegmentValidation:
             path.unlink()
 
     def test_rejects_equal_times(self) -> None:
-        """Raises ValueError when start_sec == end_sec."""
+        """Raise ValueError when start_sec == end_sec."""
         path = _create_test_audio(5.0)
         try:
             with pytest.raises(ValueError, match="must be <"):
@@ -142,7 +138,7 @@ class TestExtractSegmentFromArray:
     def test_preserves_sample_rate(self) -> None:
         """Verify segment preserves original sample rate."""
         sample_rate = 44100
-        samples = np.zeros((1, sample_rate * 3), dtype=np.float32)  # 3 seconds
+        samples = np.zeros((1, sample_rate * 3), dtype=np.float32)
 
         segment_bytes = extract_segment_from_array(
             samples, sample_rate, start_sec=0.0, end_sec=1.0
@@ -180,7 +176,6 @@ class TestExtractSegmentsBatch:
         path = _create_test_audio(10.0)
         try:
             segments = [(0.0, 1.0), (2.0, 3.0), (4.0, 5.0), (6.0, 7.0)]
-            # This should be much faster than 4 separate calls
             result = extract_segments_batch(path, segments)
             assert len(result) == 4
         finally:

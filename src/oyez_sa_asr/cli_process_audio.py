@@ -178,10 +178,18 @@ def add_audio_command(app: typer.Typer) -> None:
         ] = 24,
         workers: Annotated[
             int,
-            typer.Option("--workers", "-w", help="Parallel workers"),
+            typer.Option(
+                "--workers",
+                "-w",
+                help="Parallel workers (default: min(CPUs, 4), ~1GB RAM each)",
+            ),
         ] = 0,
     ) -> None:
-        """Process cached audio into standardized FLAC format with metadata."""
+        """Process cached audio into standardized FLAC format with metadata.
+
+        Memory: Uses ~1GB RAM per worker for large audio files (2+ hours).
+        With chunked decoding optimization, peak memory is ~1x final array size.
+        """
         cpu_workers = os.cpu_count() or 1
         num_workers = workers if workers > 0 else min(cpu_workers, _MAX_WORKERS)
 

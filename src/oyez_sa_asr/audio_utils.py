@@ -99,9 +99,14 @@ def _normalize_audio(audio: NDArray[np.generic]) -> NDArray[np.float32]:
 
 
 def load_audio(path: Path | str) -> tuple[NDArray[np.float32], int]:
-    """Load audio from file or URL.
+    """Load audio from file or URL with memory-efficient chunked decoding.
 
     Supports FLAC, MP3, OGG, WAV, and HLS/M3U8 streaming URLs.
+
+    This function uses chunked decoding to reduce peak memory usage from
+    4x to 1x of the final array size. Each frame is decoded and immediately
+    converted to float32, avoiding the memory spike from concatenating
+    all int32 frames before conversion.
 
     Args:
         path: Path to audio file or URL (including HLS/M3U8 streams).
@@ -119,20 +124,42 @@ def load_audio(path: Path | str) -> tuple[NDArray[np.float32], int]:
         num_channels: int = stream.codec_context.channels
         is_planar: bool = stream.format.is_planar
 
-        frames = [frame.to_ndarray() for frame in container.decode(audio=0)]
+        # Estimate total samples from duration (with padding for safety)
+        duration_sec = container.duration / 1_000_000 if container.duration else 0
+        # Add 10000 samples padding for rounding/edge cases
+        estimated_samples = int(duration_sec * sample_rate) + 10000
 
-        if not frames:
-            return np.zeros((1, 0), dtype=np.float32), sample_rate
+        # Pre-allocate float32 result array to avoid 4x memory spike
+        result = np.zeros((num_channels, estimated_samples), dtype=np.float32)
+        pos = 0
 
-        # PyAV to_ndarray() returns (channels, samples) shape
-        audio = np.concatenate(frames, axis=1)
+        # Decode and convert frame-by-frame (memory efficient)
+        for frame in container.decode(audio=0):
+            arr = frame.to_ndarray()  # int16 or int32 chunk
 
-        # For interleaved formats with multiple channels, reshape
-        if not is_planar and num_channels > 1:
-            total_samples = audio.shape[1] // num_channels
-            audio = audio.reshape(-1).reshape(total_samples, num_channels).T
+            # Handle interleaved format for multi-channel audio
+            if not is_planar and num_channels > 1:
+                chunk_total = arr.shape[1]
+                chunk_samples = chunk_total // num_channels
+                arr = arr.reshape(-1).reshape(chunk_samples, num_channels).T
 
-        return _normalize_audio(audio), sample_rate
+            # Convert immediately to float32
+            chunk = _normalize_audio(arr)
+            n = chunk.shape[1]
+
+            # Expand result array if needed (rare edge case)
+            if pos + n > result.shape[1]:
+                extra = max(n, result.shape[1] // 4)  # Grow by at least 25%
+                result = np.pad(result, ((0, 0), (0, extra)))
+
+            result[:, pos : pos + n] = chunk
+            pos += n
+            del arr, chunk  # Free immediately
+
+        if pos == 0:
+            return np.zeros((num_channels, 0), dtype=np.float32), sample_rate
+
+        return result[:, :pos], sample_rate
 
 
 def save_audio(
