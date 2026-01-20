@@ -17,6 +17,7 @@ from rich.console import Console
 from .cli_dataset_helpers import require_pyarrow
 from .cli_dataset_simple_proc import group_utterances_by_recording, process_by_recording
 from .cli_dataset_state import (
+    DatasetState,
     check_match,
     clean_dataset,
     load_state,
@@ -43,10 +44,86 @@ def _get_flex_terms(flex_dir: Path) -> list[str]:
         return []
     try:
         with index_file.open() as f:
-            flex_index = json.load(f)
-        return flex_index.get("terms", [])
+            return json.load(f).get("terms", [])
     except (json.JSONDecodeError, OSError):
         return []
+
+
+def _validate_flex_dataset(flex_dir: Path) -> tuple[Path, Path]:
+    """Validate flex dataset exists and return paths."""
+    utterances_pq = flex_dir / "data" / "utterances.parquet"
+    if not utterances_pq.exists():
+        console.print(f"[red]Error:[/red] {utterances_pq} not found.")
+        console.print("Run 'oyez dataset flex' first.")
+        raise typer.Exit(1)
+
+    audio_dir = flex_dir / "audio"
+    if not audio_dir.exists():
+        console.print(f"[red]Error:[/red] {audio_dir} not found.")
+        raise typer.Exit(1)
+
+    return utterances_pq, audio_dir
+
+
+def _check_state_and_clean(
+    output_dir: Path, current_state: DatasetState, force: bool
+) -> bool:
+    """Check state and clean if needed. Returns True if should skip."""
+    existing_state = load_state(output_dir)
+
+    if not force and check_match(current_state, existing_state):
+        console.print(
+            "[yellow]Skipping:[/yellow] Dataset already exists with matching settings."
+        )
+        console.print("Use --force to regenerate.")
+        return True
+
+    if existing_state is not None:
+        console.print("[dim]Cleaning existing dataset (settings changed)...[/dim]")
+        removed = clean_dataset(output_dir)
+        console.print(f"  Removed {removed} files")
+
+    return False
+
+
+def _load_and_filter_utterances(
+    pq: Any, utterances_pq: Path, terms: list[str] | None
+) -> list[dict[str, Any]]:
+    """Load utterances and filter by term if specified."""
+    console.print("Reading utterances...")
+    all_utterances = pq.read_table(utterances_pq).to_pylist()
+
+    if terms:
+        term_set = set(terms)
+        utterances = [u for u in all_utterances if u.get("term") in term_set]
+        console.print(
+            f"  Found {len(utterances)} utterances (filtered from {len(all_utterances)})"
+        )
+    else:
+        utterances = all_utterances
+        console.print(f"  Found {len(utterances)} utterances")
+
+    return utterances
+
+
+def _build_audio_paths(
+    flex_dir: Path, pq: Any, audio_dir: Path, terms: list[str] | None = None
+) -> dict[tuple[str, str], Path]:
+    """Build audio path lookup from recordings."""
+    audio_paths: dict[tuple[str, str], Path] = {}
+    recordings_pq = flex_dir / "data" / "recordings.parquet"
+    if not recordings_pq.exists():
+        return audio_paths
+
+    term_set = set(terms) if terms else None
+    for rec in pq.read_table(recordings_pq).to_pylist():
+        if term_set and rec["term"] not in term_set:
+            continue
+        key = (rec["term"], rec["docket"])
+        path = audio_dir / rec["audio_path"]
+        if path.exists():
+            audio_paths[key] = path
+    return audio_paths
 
 
 def dataset_simple(
@@ -58,6 +135,10 @@ def dataset_simple(
         Path,
         typer.Option("--output-dir", "-o", help="Dataset output directory"),
     ] = Path("datasets/simple"),
+    terms: Annotated[
+        list[str] | None,
+        typer.Option("--term", "-T", help="Filter to specific term(s)"),
+    ] = None,
     shard_size_mb: Annotated[
         int,
         typer.Option("--shard-size", "-s", help="Parquet shard size in MB"),
@@ -82,58 +163,29 @@ def dataset_simple(
     at a time using PyAV seeking to extract only needed segments.
     """
     pa, pq = require_pyarrow()
-
-    # Default to 4 workers - safe with streaming extraction (22x less memory)
     num_workers = workers if workers is not None else 4
 
     console.print("[bold]Creating oyez-sa-asr-simple dataset[/bold]")
     console.print(f"  Flex dir: {flex_dir}")
     console.print(f"  Output dir: {output_dir}")
-    console.print(f"  Shard size: {shard_size_mb} MB")
-    console.print(f"  Workers: {num_workers}")
+    if terms:
+        console.print(f"  Terms: {', '.join(terms)}")
+    console.print(f"  Shard size: {shard_size_mb} MB, Workers: {num_workers}")
     console.print()
 
-    # Validate flex dataset first (needed for state check)
-    utterances_pq = flex_dir / "data" / "utterances.parquet"
-    if not utterances_pq.exists():
-        console.print(f"[red]Error:[/red] {utterances_pq} not found.")
-        console.print("Run 'oyez dataset flex' first.")
-        raise typer.Exit(1)
+    utterances_pq, audio_dir = _validate_flex_dataset(flex_dir)
 
-    audio_dir = flex_dir / "audio"
-    if not audio_dir.exists():
-        console.print(f"[red]Error:[/red] {audio_dir} not found.")
-        raise typer.Exit(1)
-
-    # Get terms from flex dataset for state tracking
-    flex_terms = _get_flex_terms(flex_dir)
-
-    # Check state and handle mismatch/skip
+    effective_terms = terms if terms else _get_flex_terms(flex_dir)
     current_state = make_state(
-        "oyez dataset simple", flex_terms, shard_size_mb=shard_size_mb
+        "oyez dataset simple", effective_terms, shard_size_mb=shard_size_mb
     )
-    existing_state = load_state(output_dir)
 
-    if not force and check_match(current_state, existing_state):
-        console.print(
-            "[yellow]Skipping:[/yellow] Dataset already exists with matching settings."
-        )
-        console.print("Use --force to regenerate.")
+    if _check_state_and_clean(output_dir, current_state, force):
         return
 
-    if existing_state is not None:
-        console.print("[dim]Cleaning existing dataset (settings changed)...[/dim]")
-        removed = clean_dataset(output_dir)
-        console.print(f"  Removed {removed} files")
-
-    # Save incomplete state before starting
     save_state(output_dir, current_state)
-
-    console.print("Reading utterances...")
-    utterances = pq.read_table(utterances_pq).to_pylist()
-    console.print(f"  Found {len(utterances)} utterances")
-
-    audio_paths = _build_audio_paths(flex_dir, pq, audio_dir)
+    utterances = _load_and_filter_utterances(pq, utterances_pq, terms)
+    audio_paths = _build_audio_paths(flex_dir, pq, audio_dir, terms)
 
     console.print("Embedding audio segments and writing shards...")
     console.print(f"  Recordings: {len(audio_paths)}")
@@ -148,27 +200,8 @@ def dataset_simple(
     if stats["shards"] > 0:
         console.print(f"  Wrote {stats['shards']} shard files")
 
-    # Mark as complete
     current_state.completed = True
     save_state(output_dir, current_state)
-
     console.print()
     console.print("[bold green]Done![/bold green]")
     console.print(f"Output: {output_dir}")
-
-
-def _build_audio_paths(
-    flex_dir: Path, pq: Any, audio_dir: Path
-) -> dict[tuple[str, str], Path]:
-    """Build audio path lookup from recordings."""
-    audio_paths: dict[tuple[str, str], Path] = {}
-    recordings_pq = flex_dir / "data" / "recordings.parquet"
-    if not recordings_pq.exists():
-        return audio_paths
-
-    for rec in pq.read_table(recordings_pq).to_pylist():
-        key = (rec["term"], rec["docket"])
-        path = audio_dir / rec["audio_path"]
-        if path.exists():
-            audio_paths[key] = path
-    return audio_paths
