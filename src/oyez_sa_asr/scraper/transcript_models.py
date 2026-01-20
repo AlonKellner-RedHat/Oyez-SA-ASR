@@ -78,6 +78,20 @@ class ProcessedTranscript:
                     speaker_names[turn.speaker_id] = turn.speaker_name
                 total_text_blocks += turn.text_block_count
 
+        # Post-process: mark turns that are >50% of recording as invalid
+        # (likely badly labeled opinion recordings without intermediate timestamps)
+        recording_duration = max((t.stop for t in turns), default=0)
+        if recording_duration > 0:
+            for turn in turns:
+                if turn.is_valid and turn.duration / recording_duration > 0.5:
+                    # Mutate the turn to mark as invalid
+                    object.__setattr__(turn, "is_valid", False)
+                    object.__setattr__(
+                        turn,
+                        "invalid_reason",
+                        f"too_long_ratio:{turn.duration / recording_duration:.1%}",
+                    )
+
         overlap_count = sum(1 for t in turns if t.is_overlapping)
         invalid_count = sum(1 for t in turns if not t.is_valid)
         has_null_speakers = None in speaker_counts and speaker_counts[None] > 0
