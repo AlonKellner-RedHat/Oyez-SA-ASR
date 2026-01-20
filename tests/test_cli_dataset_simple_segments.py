@@ -89,7 +89,7 @@ class TestDatasetSimpleWithSegments:
                 app,
                 [
                     "dataset",
-                    "simple",
+                    "simple-lt1m",
                     "--flex-dir",
                     str(flex_dir),
                     "--output-dir",

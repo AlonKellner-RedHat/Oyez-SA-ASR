@@ -118,7 +118,7 @@ class TestDatasetSimple:
                 app,
                 [
                     "dataset",
-                    "simple",
+                    "simple-lt1m",  # Use single flavor for testing
                     "--flex-dir",
                     str(flex_dir),
                     "--output-dir",

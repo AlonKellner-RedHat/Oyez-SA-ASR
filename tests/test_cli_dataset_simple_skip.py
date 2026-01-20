@@ -90,14 +90,14 @@ class TestSkipExisting:
 
             _create_flex_dataset(flex_dir)
 
-            # Create matching state with all default settings
+            # Create matching state with lt1m settings
             state = make_state(
-                "oyez dataset simple",
+                "oyez dataset simple-lt1m",
                 ["2024"],
                 completed=True,
                 shard_size_mb=100,
                 min_duration=0,
-                max_duration=float("inf"),
+                max_duration=60,
             )
             save_state(output_dir, state)
             (output_dir / "marker.txt").write_text("original")
@@ -106,7 +106,7 @@ class TestSkipExisting:
                 app,
                 [
                     "dataset",
-                    "simple",
+                    "simple-lt1m",
                     "--flex-dir",
                     str(flex_dir),
                     "--output-dir",
@@ -129,7 +129,12 @@ class TestSkipExisting:
 
             # Create state with different shard_size_mb
             state = make_state(
-                "oyez dataset simple", ["2024"], completed=True, shard_size_mb=250
+                "oyez dataset simple-lt1m",
+                ["2024"],
+                completed=True,
+                shard_size_mb=250,
+                min_duration=0,
+                max_duration=60,
             )
             save_state(output_dir, state)
             (output_dir / "marker.txt").write_text("should be removed")
@@ -138,7 +143,7 @@ class TestSkipExisting:
                 app,
                 [
                     "dataset",
-                    "simple",
+                    "simple-lt1m",
                     "--flex-dir",
                     str(flex_dir),
                     "--output-dir",
@@ -163,7 +168,12 @@ class TestSkipExisting:
 
             # Create state with different terms (simulating flex was regenerated)
             state = make_state(
-                "oyez dataset simple", ["2023"], completed=True, shard_size_mb=500
+                "oyez dataset simple-lt1m",
+                ["2023"],
+                completed=True,
+                shard_size_mb=100,
+                min_duration=0,
+                max_duration=60,
             )
             save_state(output_dir, state)
             (output_dir / "marker.txt").write_text("should be removed")
@@ -172,7 +182,7 @@ class TestSkipExisting:
                 app,
                 [
                     "dataset",
-                    "simple",
+                    "simple-lt1m",
                     "--flex-dir",
                     str(flex_dir),
                     "--output-dir",
@@ -194,7 +204,12 @@ class TestSkipExisting:
 
             # Create incomplete state
             state = make_state(
-                "oyez dataset simple", ["2024"], completed=False, shard_size_mb=500
+                "oyez dataset simple-lt1m",
+                ["2024"],
+                completed=False,
+                shard_size_mb=100,
+                min_duration=0,
+                max_duration=60,
             )
             save_state(output_dir, state)
 
@@ -202,7 +217,7 @@ class TestSkipExisting:
                 app,
                 [
                     "dataset",
-                    "simple",
+                    "simple-lt1m",
                     "--flex-dir",
                     str(flex_dir),
                     "--output-dir",
@@ -228,7 +243,12 @@ class TestSkipExisting:
 
             # Create matching state
             state = make_state(
-                "oyez dataset simple", ["2024"], completed=True, shard_size_mb=500
+                "oyez dataset simple-lt1m",
+                ["2024"],
+                completed=True,
+                shard_size_mb=100,
+                min_duration=0,
+                max_duration=60,
             )
             save_state(output_dir, state)
 
@@ -236,7 +256,7 @@ class TestSkipExisting:
                 app,
                 [
                     "dataset",
-                    "simple",
+                    "simple-lt1m",
                     "--flex-dir",
                     str(flex_dir),
                     "--output-dir",

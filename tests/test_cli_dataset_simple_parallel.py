@@ -31,7 +31,7 @@ class TestParallelProcessing:
 
     def test_workers_option_in_help(self) -> None:
         """Workers option appears in help."""
-        result = runner.invoke(app, ["dataset", "simple", "--help"])
+        result = runner.invoke(app, ["dataset", "simple-lt1m", "--help"])
         assert result.exit_code == 0
         assert "--workers" in result.output or "-w" in result.output
 
@@ -94,7 +94,7 @@ class TestParallelProcessing:
                 app,
                 [
                     "dataset",
-                    "simple",
+                    "simple-lt1m",
                     "--flex-dir",
                     str(flex_dir),
                     "--output-dir",
@@ -175,7 +175,7 @@ class TestParallelProcessing:
                 app,
                 [
                     "dataset",
-                    "simple",
+                    "simple-lt1m",
                     "--flex-dir",
                     str(flex_dir),
                     "--output-dir",
