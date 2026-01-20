@@ -187,9 +187,6 @@ def collect_utterances(
                     transcript_type = data.get("type", "")
 
                     for turn in data.get("turns", []):
-                        if not turn.get("is_valid"):
-                            continue
-
                         utterances.append(
                             {
                                 "term": term,
@@ -203,6 +200,8 @@ def collect_utterances(
                                 "speaker_name": turn.get("speaker_name"),
                                 "text": turn.get("text"),
                                 "word_count": turn.get("word_count"),
+                                "valid": turn.get("is_valid", False),
+                                "invalid_reason": turn.get("invalid_reason"),
                             }
                         )
                 except (json.JSONDecodeError, KeyError):

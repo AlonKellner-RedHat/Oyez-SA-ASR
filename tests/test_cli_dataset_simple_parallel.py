@@ -64,11 +64,25 @@ class TestParallelProcessing:
                 {
                     "term": "2024",
                     "docket": "22-123",
-                    "text": "Test",
+                    "transcript_type": "oral_argument",
+                    "text": "Test utterance one",
+                    "word_count": 3,
                     "speaker_name": "Roberts",
                     "start_sec": 0.0,
                     "end_sec": 2.0,
-                }
+                    "duration_sec": 2.0,
+                },
+                {
+                    "term": "2024",
+                    "docket": "22-123",
+                    "transcript_type": "oral_argument",
+                    "text": "Test utterance two",
+                    "word_count": 3,
+                    "speaker_name": "Sotomayor",
+                    "start_sec": 5.0,
+                    "end_sec": 8.0,
+                    "duration_sec": 3.0,
+                },
             ]
             pq.write_table(
                 pa.Table.from_pylist(utterances),
@@ -123,10 +137,27 @@ class TestParallelProcessing:
                     {
                         "term": "2024",
                         "docket": docket,
-                        "text": f"Test {i}",
+                        "transcript_type": "oral_argument",
+                        "text": f"Test utterance number {i}",
+                        "word_count": 4,
                         "speaker_name": "Speaker",
                         "start_sec": 0.0,
                         "end_sec": 2.0,
+                        "duration_sec": 2.0,
+                    }
+                )
+                # Add second utterance to avoid too_long_ratio filter
+                utterances.append(
+                    {
+                        "term": "2024",
+                        "docket": docket,
+                        "transcript_type": "oral_argument",
+                        "text": f"Second test {i}",
+                        "word_count": 3,
+                        "speaker_name": "Speaker2",
+                        "start_sec": 3.0,
+                        "end_sec": 5.0,
+                        "duration_sec": 2.0,
                     }
                 )
 
@@ -163,4 +194,5 @@ class TestParallelProcessing:
 
             table = pq.read_table(output_parquet[0])
             rows = table.to_pylist()
-            assert len(rows) == 3
+            # 3 recordings x 2 utterances each = 6 total
+            assert len(rows) == 6

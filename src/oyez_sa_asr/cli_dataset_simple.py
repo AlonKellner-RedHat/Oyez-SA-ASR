@@ -7,16 +7,20 @@ Optimized with memory-efficient streaming extraction (Option C):
 - Safe for parallel processing with multiple workers
 """
 
-import json
 import logging
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 
 import typer
 from rich.console import Console
 from rich.logging import RichHandler
 
 from .cli_dataset_helpers import require_pyarrow
+from .cli_dataset_simple_load import (
+    build_audio_paths,
+    get_flex_terms,
+    load_and_filter_utterances,
+)
 from .cli_dataset_simple_proc import group_utterances_by_recording, process_by_recording
 from .cli_dataset_state import (
     DatasetState,
@@ -46,18 +50,6 @@ _group_utterances_by_recording = group_utterances_by_recording
 def register_simple_command(app: typer.Typer) -> None:
     """Register the simple command on the given app."""
     app.command(name="simple")(dataset_simple)
-
-
-def _get_flex_terms(flex_dir: Path) -> list[str]:
-    """Get terms from flex dataset index."""
-    index_file = flex_dir / "index.json"
-    if not index_file.exists():
-        return []
-    try:
-        with index_file.open() as f:
-            return json.load(f).get("terms", [])
-    except (json.JSONDecodeError, OSError):
-        return []
 
 
 def _validate_flex_dataset(flex_dir: Path) -> tuple[Path, Path]:
@@ -97,46 +89,6 @@ def _check_state_and_clean(
     return False
 
 
-def _load_and_filter_utterances(
-    pq: Any, utterances_pq: Path, terms: list[str] | None
-) -> list[dict[str, Any]]:
-    """Load utterances and filter by term if specified."""
-    console.print("Reading utterances...")
-    all_utterances = pq.read_table(utterances_pq).to_pylist()
-
-    if terms:
-        term_set = set(terms)
-        utterances = [u for u in all_utterances if u.get("term") in term_set]
-        console.print(
-            f"  Found {len(utterances)} utterances (filtered from {len(all_utterances)})"
-        )
-    else:
-        utterances = all_utterances
-        console.print(f"  Found {len(utterances)} utterances")
-
-    return utterances
-
-
-def _build_audio_paths(
-    flex_dir: Path, pq: Any, audio_dir: Path, terms: list[str] | None = None
-) -> dict[tuple[str, str], Path]:
-    """Build audio path lookup from recordings."""
-    audio_paths: dict[tuple[str, str], Path] = {}
-    recordings_pq = flex_dir / "data" / "recordings.parquet"
-    if not recordings_pq.exists():
-        return audio_paths
-
-    term_set = set(terms) if terms else None
-    for rec in pq.read_table(recordings_pq).to_pylist():
-        if term_set and rec["term"] not in term_set:
-            continue
-        key = (rec["term"], rec["docket"])
-        path = audio_dir / rec["audio_path"]
-        if path.exists():
-            audio_paths[key] = path
-    return audio_paths
-
-
 def dataset_simple(
     flex_dir: Annotated[
         Path,
@@ -168,6 +120,13 @@ def dataset_simple(
         bool,
         typer.Option("--force", "-F", help="Force regeneration if output exists"),
     ] = False,
+    include_invalid: Annotated[
+        bool,
+        typer.Option(
+            "--include-invalid",
+            help="Include invalid utterances (low WPM, overlap, etc)",
+        ),
+    ] = False,
 ) -> None:
     """Create oyez-sa-asr-simple dataset with embedded audio.
 
@@ -193,7 +152,7 @@ def dataset_simple(
 
     utterances_pq, audio_dir = _validate_flex_dataset(flex_dir)
 
-    effective_terms = terms if terms else _get_flex_terms(flex_dir)
+    effective_terms = terms if terms else get_flex_terms(flex_dir)
     current_state = make_state(
         "oyez dataset simple", effective_terms, shard_size_mb=shard_size_mb
     )
@@ -202,8 +161,10 @@ def dataset_simple(
         return
 
     save_state(output_dir, current_state)
-    utterances = _load_and_filter_utterances(pq, utterances_pq, terms)
-    audio_paths = _build_audio_paths(flex_dir, pq, audio_dir, terms)
+    utterances = load_and_filter_utterances(
+        pq, utterances_pq, terms, include_invalid=include_invalid
+    )
+    audio_paths = build_audio_paths(flex_dir, pq, audio_dir, terms)
 
     console.print("Embedding audio segments and writing shards...")
     console.print(f"  Recordings: {len(audio_paths)}")

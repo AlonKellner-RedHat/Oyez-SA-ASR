@@ -43,6 +43,42 @@ def parse_transcript_type(title: str) -> tuple[str, str | None]:
     return ("unknown", None)
 
 
+# Validation thresholds
+_MIN_WPM = 30  # Below this is suspicious (silence/timestamp error)
+_MAX_WPM = 600  # Above this is impossible
+_MAX_OVERLAP_SEC = 3.0  # Overlaps beyond this are invalid
+
+
+def _validate_turn(
+    duration: float,
+    word_count: int,
+    text: str,
+    overlap_seconds: float,
+) -> tuple[bool, str | None]:
+    """Validate a turn and return (is_valid, invalid_reason)."""
+    # Invalid timestamps
+    if duration <= 0:
+        return False, "invalid_duration"
+
+    # Empty text
+    if not text.strip():
+        return False, "empty_text"
+
+    # Abnormal WPM (only check for turns > 10 seconds)
+    if duration > 10:
+        wpm = word_count / (duration / 60) if duration > 0 else 0
+        if wpm < _MIN_WPM:
+            return False, f"wpm_too_low:{wpm:.1f}"
+        if wpm > _MAX_WPM:
+            return False, f"wpm_too_high:{wpm:.1f}"
+
+    # Excessive overlap
+    if overlap_seconds > _MAX_OVERLAP_SEC:
+        return False, f"overlap:{overlap_seconds:.1f}s"
+
+    return True, None
+
+
 @dataclass
 class ProcessedTurn:
     """A processed turn from a transcript."""
@@ -55,7 +91,9 @@ class ProcessedTurn:
     speaker_id: int | None
     speaker_name: str | None
     is_valid: bool
+    invalid_reason: str | None
     is_overlapping: bool
+    overlap_seconds: float
     text_block_count: int
     char_count: int
     word_count: int
@@ -82,11 +120,22 @@ class ProcessedTurn:
         texts = [block.get("text", "") for block in text_blocks]
         text = " ".join(t.strip() for t in texts if t.strip())
 
-        is_valid = duration > 0 and bool(text.strip())
-        is_overlapping = prev_stop is not None and start < prev_stop
-
         char_count = len(text)
         word_count = len(text.split()) if text else 0
+
+        # Calculate overlap
+        overlap_seconds = 0.0
+        if prev_stop is not None and start < prev_stop:
+            overlap_seconds = prev_stop - start
+        is_overlapping = overlap_seconds > 0
+
+        # Validate turn
+        is_valid, invalid_reason = _validate_turn(
+            duration=duration,
+            word_count=word_count,
+            text=text,
+            overlap_seconds=overlap_seconds,
+        )
 
         return cls(
             index=index,
@@ -97,7 +146,9 @@ class ProcessedTurn:
             speaker_id=speaker_id,
             speaker_name=speaker_name,
             is_valid=is_valid,
+            invalid_reason=invalid_reason,
             is_overlapping=is_overlapping,
+            overlap_seconds=overlap_seconds,
             text_block_count=len(text_blocks),
             char_count=char_count,
             word_count=word_count,
@@ -115,7 +166,9 @@ class ProcessedTurn:
             "speaker_id": self.speaker_id,
             "speaker_name": self.speaker_name,
             "is_valid": self.is_valid,
+            "invalid_reason": self.invalid_reason,
             "is_overlapping": self.is_overlapping,
+            "overlap_seconds": self.overlap_seconds,
             "text_block_count": self.text_block_count,
             "char_count": self.char_count,
             "word_count": self.word_count,

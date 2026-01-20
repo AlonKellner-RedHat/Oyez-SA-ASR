@@ -52,11 +52,25 @@ def _create_flex_dataset(flex_dir: Path) -> None:
         {
             "term": "2024",
             "docket": "22-123",
-            "text": "Test",
+            "transcript_type": "oral_argument",
+            "text": "Test utterance one",
+            "word_count": 3,
             "speaker_name": "Roberts",
             "start_sec": 0.0,
             "end_sec": 2.0,
-        }
+            "duration_sec": 2.0,
+        },
+        {
+            "term": "2024",
+            "docket": "22-123",
+            "transcript_type": "oral_argument",
+            "text": "Test utterance two",
+            "word_count": 3,
+            "speaker_name": "Sotomayor",
+            "start_sec": 5.0,
+            "end_sec": 8.0,
+            "duration_sec": 3.0,
+        },
     ]
     pq.write_table(
         pa.Table.from_pylist(utterances),
