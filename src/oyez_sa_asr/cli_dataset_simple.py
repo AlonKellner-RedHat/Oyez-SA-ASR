@@ -141,8 +141,10 @@ def dataset_simple(
     ] = None,
     shard_size_mb: Annotated[
         int,
-        typer.Option("--shard-size", "-s", help="Parquet shard size in MB"),
-    ] = 500,
+        typer.Option(
+            "--shard-size", "-s", help="Parquet shard size in MB (lower=less RAM)"
+        ),
+    ] = 100,
     workers: Annotated[
         int | None,
         typer.Option(

@@ -162,7 +162,9 @@ def extract_segments_streaming(
                 segment_bytes = _encode_flac(segment, sample_rate, bits_per_sample)
                 result.append(segment_bytes)
 
-                del frames, segment
+                # Aggressive memory cleanup after each segment
+                del frames, segment, segment_bytes
+                gc.collect()
             else:
                 # Empty segment (beyond file end or seek issue)
                 result.append(b"")

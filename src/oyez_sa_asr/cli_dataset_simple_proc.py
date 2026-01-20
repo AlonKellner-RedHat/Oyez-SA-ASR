@@ -109,6 +109,23 @@ def _process_single_recording_impl(
     return rows, 0
 
 
+def _build_work_items(
+    utterances: list[dict[str, Any]],
+    audio_paths: dict[tuple[str, str], Path],
+) -> tuple[list[tuple[tuple[str, str], list[dict[str, Any]], Path]], int]:
+    """Build work items for parallel processing."""
+    grouped = group_utterances_by_recording(utterances)
+    work_items = []
+    skipped_count = 0
+    for key, rec_utterances in grouped.items():
+        audio_path = audio_paths.get(key)
+        if audio_path is None or not audio_path.exists():
+            skipped_count += len(rec_utterances)
+            continue
+        work_items.append((key, rec_utterances, audio_path))
+    return work_items, skipped_count
+
+
 def process_by_recording(
     utterances: list[dict[str, Any]],
     audio_paths: dict[tuple[str, str], Path],
@@ -132,87 +149,75 @@ def process_by_recording(
     data_dir.mkdir(parents=True, exist_ok=True)
     target_bytes = shard_size_mb * 1024 * 1024
 
-    # Group utterances by recording
-    grouped = group_utterances_by_recording(utterances)
+    work_items, skipped_count = _build_work_items(utterances, audio_paths)
 
-    # Build work items for parallel processing
-    work_items = []
-    skipped_count = 0
-    for key, rec_utterances in grouped.items():
-        audio_path = audio_paths.get(key)
-        if audio_path is None or not audio_path.exists():
-            skipped_count += len(rec_utterances)
-            continue
-        work_items.append((key, rec_utterances, audio_path))
-
+    # Shard state
     current_shard: list[dict[str, Any]] = []
     current_size = 0
     shard_num = 0
+    recs_in_shard = 0
     embedded_count = 0
     error_count = 0
 
-    # Process recordings in parallel.
-    # Note: as_completed() returns futures in completion order, not submission
-    # order, so shard contents will vary between runs. This is acceptable for
-    # ML training data where order doesn't matter.
+    def _write_shard() -> None:
+        nonlocal current_shard, current_size, shard_num, recs_in_shard
+        if current_shard:
+            pq.write_table(
+                pa.Table.from_pylist(current_shard),
+                data_dir / f"train-{shard_num:05d}.parquet",
+            )
+            shard_num += 1
+            current_shard = []
+            current_size = 0
+            recs_in_shard = 0
+            gc.collect()
+
     with ProcessPoolExecutor(max_workers=workers) as executor:
         futures = {
             executor.submit(process_single_recording, item): item for item in work_items
         }
-
         with tqdm(total=len(futures), desc="Recordings", unit="rec") as pbar:
             for future in as_completed(futures):
-                try:
-                    rows, errors = future.result()
-                except BrokenExecutor as e:
-                    # Worker process crashed - log and continue
-                    item = futures[future]
-                    logger.error("Worker crashed processing %s: %s", item[2], e)
-                    error_count += len(item[1])
-                    pbar.update(1)
-                    continue
-                except Exception as e:
-                    # Unexpected error
-                    item = futures[future]
-                    logger.exception("Error processing %s: %s", item[2], e)
-                    error_count += len(item[1])
+                rows, errors = _handle_future(future, futures)
+                if rows is None:
+                    error_count += errors
                     pbar.update(1)
                     continue
 
                 error_count += errors
-
                 for row in rows:
                     current_shard.append(row)
                     current_size += len(row["audio"]["bytes"])
                     embedded_count += 1
 
-                    # Write shard when target size reached
-                    if current_size >= target_bytes:
-                        pq.write_table(
-                            pa.Table.from_pylist(current_shard),
-                            data_dir / f"train-{shard_num:05d}.parquet",
-                        )
-                        shard_num += 1
-                        current_shard = []
-                        current_size = 0
+                recs_in_shard += 1
+                if current_size >= target_bytes or recs_in_shard >= 5:
+                    _write_shard()
 
-                # Memory cleanup after processing each recording
                 del rows
                 gc.collect()
-
                 pbar.update(1)
 
-    # Write final shard
-    if current_shard:
-        pq.write_table(
-            pa.Table.from_pylist(current_shard),
-            data_dir / f"train-{shard_num:05d}.parquet",
-        )
-        shard_num += 1
-
+    _write_shard()
     return {
         "embedded": embedded_count,
         "skipped": skipped_count,
         "errors": error_count,
         "shards": shard_num,
     }
+
+
+def _handle_future(
+    future: Any, futures: dict[Any, Any]
+) -> tuple[list[dict[str, Any]] | None, int]:
+    """Handle a completed future, returning (rows, errors) or (None, count)."""
+    try:
+        return future.result()
+    except BrokenExecutor as e:
+        item = futures[future]
+        logger.error("Worker crashed processing %s: %s", item[2], e)
+        return None, len(item[1])
+    except Exception as e:
+        item = futures[future]
+        logger.exception("Error processing %s: %s", item[2], e)
+        return None, len(item[1])

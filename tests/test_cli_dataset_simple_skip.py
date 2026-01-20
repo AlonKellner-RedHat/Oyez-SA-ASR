@@ -76,9 +76,9 @@ class TestSkipExisting:
 
             _create_flex_dataset(flex_dir)
 
-            # Create matching state with shard_size_mb=500 (default)
+            # Create matching state with shard_size_mb=100 (default)
             state = make_state(
-                "oyez dataset simple", ["2024"], completed=True, shard_size_mb=500
+                "oyez dataset simple", ["2024"], completed=True, shard_size_mb=100
             )
             save_state(output_dir, state)
             (output_dir / "marker.txt").write_text("original")
