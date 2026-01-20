@@ -34,7 +34,7 @@ class TestDatasetSimple:
         """Shows help."""
         result = runner.invoke(app, ["dataset", "simple", "--help"])
         assert result.exit_code == 0
-        assert "oyez-sa-asr-simple" in result.output
+        assert "simple dataset" in result.output.lower()
 
     def test_requires_flex_dataset(self) -> None:
         """Fails if flex dataset doesn't exist."""
@@ -175,3 +175,35 @@ class TestGroupUtterancesByRecording:
         """Handles empty utterances list."""
         grouped = _group_utterances_by_recording([])
         assert grouped == {}
+
+
+class TestDurationFlavors:
+    """Tests for duration-based simple dataset commands."""
+
+    def test_lt1m_help(self) -> None:
+        """simple-lt1m shows help."""
+        result = runner.invoke(app, ["dataset", "simple-lt1m", "--help"])
+        assert result.exit_code == 0
+        assert "< 1 minute" in result.output
+
+    def test_lt5m_help(self) -> None:
+        """simple-lt5m shows help."""
+        result = runner.invoke(app, ["dataset", "simple-lt5m", "--help"])
+        assert result.exit_code == 0
+        assert "1-5 minutes" in result.output
+
+    def test_lt30m_help(self) -> None:
+        """simple-lt30m shows help."""
+        result = runner.invoke(app, ["dataset", "simple-lt30m", "--help"])
+        assert result.exit_code == 0
+        assert "5-30 minutes" in result.output
+
+    def test_lt1m_default_workers(self) -> None:
+        """simple-lt1m defaults to 8 workers."""
+        result = runner.invoke(app, ["dataset", "simple-lt1m", "--help"])
+        assert "default: 8" in result.output.lower()
+
+    def test_lt30m_default_workers(self) -> None:
+        """simple-lt30m defaults to 1 worker."""
+        result = runner.invoke(app, ["dataset", "simple-lt30m", "--help"])
+        assert "default: 1" in result.output.lower()

@@ -23,9 +23,15 @@ def get_flex_terms(flex_dir: Path) -> list[str]:
 
 
 def load_and_filter_utterances(
-    pq: Any, utterances_pq: Path, terms: list[str] | None, *, include_invalid: bool
+    pq: Any,
+    utterances_pq: Path,
+    terms: list[str] | None,
+    *,
+    include_invalid: bool,
+    min_duration_sec: float = 0.0,
+    max_duration_sec: float = float("inf"),
 ) -> list[dict[str, Any]]:
-    """Load utterances and filter by term and validity."""
+    """Load utterances and filter by term, validity, and duration."""
     console.print("Reading utterances...")
     all_utterances = pq.read_table(utterances_pq).to_pylist()
 
@@ -57,6 +63,21 @@ def load_and_filter_utterances(
             for reason, count in sorted(reasons.items(), key=lambda x: -x[1]):
                 console.print(f"    [yellow]{reason}:[/yellow] {count}")
         utterances = valid_utterances
+
+    # Filter by duration range
+    if min_duration_sec > 0 or max_duration_sec < float("inf"):
+        before_count = len(utterances)
+        utterances = [
+            u
+            for u in utterances
+            if min_duration_sec <= (u.get("duration_sec") or 0) < max_duration_sec
+        ]
+        filtered = before_count - len(utterances)
+        if filtered > 0:
+            console.print(
+                f"  Duration filter ({min_duration_sec:.0f}s-{max_duration_sec:.0f}s): "
+                f"{len(utterances)} kept, {filtered} excluded"
+            )
 
     return utterances
 
