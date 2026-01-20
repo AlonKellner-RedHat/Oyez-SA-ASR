@@ -85,10 +85,13 @@ oyez publish simple --repo-id org/oyez-sa-asr-simple
 
 ```markdown
 ## [v2025.0] - 2025-12-01
+
 ### Added
+
 - 2025 term: 72 arguments, 4,320 utterances
 
 ### Stats
+
 - Recordings: 5,100 (+72)
 - Utterances: 510,000 (+4,320)
 - Storage: raw 345GB, flex 1.1TB, simple 2.2TB

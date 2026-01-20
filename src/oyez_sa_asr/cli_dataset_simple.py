@@ -161,9 +161,9 @@ def dataset_simple(
         typer.Option(
             "--workers",
             "-w",
-            help="Parallel workers (default: 1, increase with caution - may OOM)",
+            help="Parallel workers (default: 4, reduce to 1 if OOM occurs)",
         ),
-    ] = 1,
+    ] = 4,
     force: Annotated[
         bool,
         typer.Option("--force", "-F", help="Force regeneration if output exists"),

@@ -65,6 +65,7 @@ the diff that lack corresponding tests.
 ````markdown
 `[CRITICAL]`
 This looks like a potential **SQL injection** vulnerability.
+
 ```python
 ┌───┌─ path/to/file.py:125
 │...│
@@ -80,6 +81,7 @@ This looks like a potential **SQL injection** vulnerability.
 ````markdown
 `[SUGGESTION]`
 This can be simplified using a single expression.
+
 ```diff
  ┌──┌──┌─ path/to/file.py:46:50
  │--│++│
@@ -101,6 +103,7 @@ This can be simplified using a single expression.
 ````markdown
 `[FIXED]`
 Automatically fixed a typo in a comment.
+
 ```diff
  ┌───┌───┌─ path/to/file.py:89
  │---│+++│
