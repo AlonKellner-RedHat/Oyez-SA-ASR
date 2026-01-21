@@ -41,6 +41,10 @@ def scrape_index(
         int,
         typer.Option("--ttl-days", "-t", help="Cache TTL in days"),
     ] = 30,
+    force: Annotated[
+        bool,
+        typer.Option("--force", "-F", help="Bypass cache and re-fetch all"),
+    ] = False,
 ) -> None:
     """Scrape case index pages from the Oyez API."""
     console.print("[bold]Scraping Oyez case index[/bold]")
@@ -48,10 +52,14 @@ def scrape_index(
     console.print(f"  Max pages: {max_pages or 'unlimited'}")
     console.print(f"  Per page: {per_page}")
     console.print(f"  Cache TTL: {ttl_days} days")
+    if force:
+        console.print("  [yellow]Force mode: bypassing cache[/yellow]")
     console.print()
 
     fetcher = AdaptiveFetcher.create(cache_dir, ttl_days=ttl_days)
-    traverser = OyezCasesTraverser(fetcher, per_page=per_page, max_pages=max_pages)
+    traverser = OyezCasesTraverser(
+        fetcher, per_page=per_page, max_pages=max_pages, force=force
+    )
 
     cases = asyncio.run(traverser.fetch_all())
 
@@ -87,6 +95,10 @@ def scrape_cases(
             "--min-improvement", "-m", help="Min rate improvement to scale (0.25=25%)"
         ),
     ] = 0.25,
+    force: Annotated[
+        bool,
+        typer.Option("--force", "-F", help="Bypass cache and re-fetch all"),
+    ] = False,
 ) -> None:
     """Scrape detailed case information from the Oyez API.
 
@@ -105,6 +117,8 @@ def scrape_cases(
     console.print(f"  Cache TTL: {ttl_days} days")
     console.print(f"  Max parallelism: {max_parallelism}")
     console.print(f"  Min improvement: {min_improvement:.0%}")
+    if force:
+        console.print("  [yellow]Force mode: bypassing cache[/yellow]")
     console.print()
 
     with index_file.open() as f:
@@ -148,7 +162,7 @@ def scrape_cases(
         pbar.refresh()
 
     async def run_fetch() -> list[FetchResult]:
-        return await fetcher.fetch_batch_adaptive(requests, on_progress)
+        return await fetcher.fetch_batch_adaptive(requests, on_progress, force=force)
 
     all_results = asyncio.run(run_fetch())
     if pbar is not None:

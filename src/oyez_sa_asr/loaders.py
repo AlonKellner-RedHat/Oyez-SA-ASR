@@ -23,15 +23,20 @@ if TYPE_CHECKING:
 # Type alias for optional HF datasets dependency
 Dataset = Any  # Actually datasets.Dataset when installed
 
+# Resolve project root (parent of src/)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
 # Default dataset locations (relative to project root)
-DEFAULT_RAW_DIR = Path("datasets/raw")
-DEFAULT_FLEX_DIR = Path("datasets/flex")
-DEFAULT_SIMPLE_DIR = Path("datasets/simple")
+DEFAULT_RAW_DIR = _PROJECT_ROOT / "datasets" / "raw"
+DEFAULT_FLEX_DIR = _PROJECT_ROOT / "datasets" / "flex"
+DEFAULT_SIMPLE_DIR = _PROJECT_ROOT / "datasets" / "simple"
 
 
 def load_simple_hf(
     split: str = "lt1m",
     data_dir: Path | None = None,
+    *,
+    streaming: bool = False,
 ) -> Any:
     """Load simple dataset as HuggingFace Dataset with audio decoding.
 
@@ -41,22 +46,37 @@ def load_simple_hf(
     Args:
         split: One of 'lt1m', 'lt5m', 'lt30m'
         data_dir: Override default datasets/simple directory
+        streaming: If True, return IterableDataset for memory-efficient streaming
 
     Returns
     -------
-        HuggingFace Dataset with decoded audio
+        HuggingFace Dataset (or IterableDataset if streaming=True)
+
+    Raises
+    ------
+        FileNotFoundError: If the dataset hasn't been generated yet
 
     Example:
+        # Standard loading (random access)
         ds = load_simple_hf("lt1m")
         sample = ds[0]
-        print(sample["audio"]["array"])  # numpy array
-        print(sample["sentence"])        # transcription
+
+        # Streaming mode (memory efficient)
+        ds = load_simple_hf("lt1m", streaming=True)
+        for sample in ds:
+            print(sample["sentence"])
     """
-    from datasets import load_dataset  # noqa: PLC0415  # ty: ignore  # pragma: no cover
+    from datasets import load_dataset  # noqa: PLC0415  # pragma: no cover
 
     base = data_dir or DEFAULT_SIMPLE_DIR  # pragma: no cover
+    split_dir = base / split / "data" / "utterances"  # pragma: no cover
+    if not split_dir.exists():  # pragma: no cover
+        msg = f"Dataset not found at {split_dir}. Run 'oyez dataset simple' first."
+        raise FileNotFoundError(msg)
+
+    parquet_pattern = str(split_dir / "*.parquet")  # pragma: no cover
     return load_dataset(
-        str(base), split=split, trust_remote_code=True
+        "parquet", data_files=parquet_pattern, split="train", streaming=streaming
     )  # pragma: no cover
 
 
@@ -152,7 +172,7 @@ def play_audio(audio_bytes: bytes, rate: int = 16000) -> Any:
         IPython Audio widget
     """
     # IPython is optional - only available in Jupyter
-    from IPython.display import Audio  # noqa: PLC0415  # ty: ignore  # pragma: no cover
+    from IPython.display import Audio  # noqa: PLC0415  # pragma: no cover
 
     return Audio(data=audio_bytes, rate=rate)  # pragma: no cover
 

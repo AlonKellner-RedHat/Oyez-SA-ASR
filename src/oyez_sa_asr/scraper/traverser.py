@@ -24,6 +24,7 @@ class OyezCasesTraverser:
         *,
         per_page: int = DEFAULT_PER_PAGE,
         max_pages: int | None = None,
+        force: bool = False,
     ) -> None:
         """Initialize the traverser.
 
@@ -31,10 +32,12 @@ class OyezCasesTraverser:
             fetcher: The fetcher to use for requests.
             per_page: Number of results per page.
             max_pages: Maximum number of pages to fetch (None for unlimited).
+            force: If True, bypass cache and re-fetch all pages.
         """
         self.fetcher = fetcher
         self.per_page = per_page
         self.max_pages = max_pages
+        self.force = force
 
     def _build_url(self, page: int) -> str:
         """Build the URL for a specific page."""
@@ -62,7 +65,7 @@ class OyezCasesTraverser:
                 break
 
             request = self._create_request(page)
-            result = await self.fetcher.fetch_one(request)
+            result = await self.fetcher.fetch_one(request, force=self.force)
 
             yield page, result
 

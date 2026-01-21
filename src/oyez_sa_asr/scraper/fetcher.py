@@ -43,31 +43,48 @@ class AdaptiveFetcher:
         self.min_improvement = min_improvement
 
     def _partition_cached(
-        self, requests: Sequence[RequestMetadata]
+        self, requests: Sequence[RequestMetadata], *, force: bool = False
     ) -> tuple[list[FetchResult], list[tuple[RequestMetadata, int]]]:
-        """Partition requests into cached results and uncached."""
+        """Partition requests into cached results and uncached.
+
+        Args:
+            requests: List of requests to partition.
+            force: If True, bypass cache and fetch all requests.
+        """
         results: list[FetchResult] = []
         needs_fetch: list[tuple[RequestMetadata, int]] = []
         for request in requests:
-            cached = self.downloader.check_cache(request)
-            if cached:
-                results.append(cached)
-            else:
+            if force:
+                # Force mode: skip cache, fetch everything
                 needs_fetch.append((request, 0))
+            else:
+                cached = self.downloader.check_cache(request)
+                if cached:
+                    results.append(cached)
+                else:
+                    needs_fetch.append((request, 0))
         return results, needs_fetch
 
     async def fetch_batch_adaptive(
         self,
         requests: Sequence[RequestMetadata],
         on_progress: ProgressCallback | None = None,
+        *,
+        force: bool = False,
     ) -> list[FetchResult]:
-        """Fetch with worker-based adaptive parallelism."""
+        """Fetch with worker-based adaptive parallelism.
+
+        Args:
+            requests: List of requests to fetch.
+            on_progress: Optional callback for progress updates.
+            force: If True, bypass cache and re-fetch all requests.
+        """
         if not requests:
             return []
 
         shuffled = list(requests)
         random.shuffle(shuffled)
-        cached_results, pending = self._partition_cached(shuffled)
+        cached_results, pending = self._partition_cached(shuffled, force=force)
         if not pending:
             return cached_results
 
@@ -99,16 +116,18 @@ class AdaptiveFetcher:
 
         return cached_results + fetched_results
 
-    async def fetch_one(self, request: RequestMetadata) -> FetchResult:
+    async def fetch_one(
+        self, request: RequestMetadata, *, force: bool = False
+    ) -> FetchResult:
         """Fetch a single request (convenience wrapper)."""
-        results = await self.fetch_batch_adaptive([request])
+        results = await self.fetch_batch_adaptive([request], force=force)
         return results[0]
 
     async def fetch_batch(
-        self, requests: Sequence[RequestMetadata]
+        self, requests: Sequence[RequestMetadata], *, force: bool = False
     ) -> list[FetchResult]:
         """Fetch a batch (alias for fetch_batch_adaptive without progress)."""
-        return await self.fetch_batch_adaptive(requests)
+        return await self.fetch_batch_adaptive(requests, force=force)
 
     @classmethod
     def create(

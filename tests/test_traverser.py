@@ -41,7 +41,9 @@ class TestOyezCasesTraverser:
             responses = [[{"id": 1}, {"id": 2}], []]
             call_count = 0
 
-            async def mock_fetch_one(request: RequestMetadata) -> FetchResult:
+            async def mock_fetch_one(
+                request: RequestMetadata, **_: bool
+            ) -> FetchResult:
                 nonlocal call_count
                 data = responses[call_count] if call_count < len(responses) else []
                 call_count += 1
@@ -60,7 +62,9 @@ class TestOyezCasesTraverser:
             fetcher = AdaptiveFetcher.create(Path(tmpdir))
             traverser = OyezCasesTraverser(fetcher, per_page=10, max_pages=2)
 
-            async def mock_fetch_one(request: RequestMetadata) -> FetchResult:
+            async def mock_fetch_one(
+                request: RequestMetadata, **_: bool
+            ) -> FetchResult:
                 return FetchResult(
                     url=request.url, success=True, status_code=200, data=[{"id": 1}]
                 )
@@ -76,7 +80,9 @@ class TestOyezCasesTraverser:
             fetcher = AdaptiveFetcher.create(Path(tmpdir))
             traverser = OyezCasesTraverser(fetcher, per_page=10)
 
-            async def mock_fetch_one(request: RequestMetadata) -> FetchResult:
+            async def mock_fetch_one(
+                request: RequestMetadata, **_: bool
+            ) -> FetchResult:
                 return FetchResult(url=request.url, success=False, error="Net error")
 
             with patch.object(fetcher, "fetch_one", side_effect=mock_fetch_one):
@@ -92,7 +98,9 @@ class TestOyezCasesTraverser:
             responses = [[{"id": 1}, {"id": 2}], [{"id": 3}]]
             call_count = 0
 
-            async def mock_fetch_one(request: RequestMetadata) -> FetchResult:
+            async def mock_fetch_one(
+                request: RequestMetadata, **_: bool
+            ) -> FetchResult:
                 nonlocal call_count
                 data = responses[call_count] if call_count < len(responses) else []
                 call_count += 1

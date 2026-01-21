@@ -48,6 +48,10 @@ def add_transcripts_command(scrape_app: typer.Typer) -> None:
                 help="Min rate improvement to scale (0.25=25%)",
             ),
         ] = 0.25,
+        force: Annotated[
+            bool,
+            typer.Option("--force", "-F", help="Bypass cache and re-fetch all"),
+        ] = False,
     ) -> None:
         """Scrape transcript data from case_media API endpoints.
 
@@ -61,6 +65,8 @@ def add_transcripts_command(scrape_app: typer.Typer) -> None:
         console.print(f"  Cache TTL: {ttl_days} days")
         console.print(f"  Max parallelism: {max_parallelism}")
         console.print(f"  Min improvement: {min_improvement:.0%}")
+        if force:
+            console.print("  [yellow]Force mode: bypassing cache[/yellow]")
         console.print()
 
         urls = extract_media_urls(cases_dir, terms)
@@ -106,7 +112,9 @@ def add_transcripts_command(scrape_app: typer.Typer) -> None:
             pbar.refresh()
 
         async def run_fetch() -> list[FetchResult]:
-            return await fetcher.fetch_batch_adaptive(requests, on_progress)
+            return await fetcher.fetch_batch_adaptive(
+                requests, on_progress, force=force
+            )
 
         all_results = asyncio.run(run_fetch())
         if pbar is not None:

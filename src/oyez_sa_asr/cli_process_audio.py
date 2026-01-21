@@ -12,6 +12,7 @@ import typer
 from rich.console import Console
 from tqdm import tqdm
 
+from .audio_analysis import detect_anomalies
 from .audio_source import (
     AudioSource,
     find_audio_sources,
@@ -24,6 +25,20 @@ console = Console(force_terminal=True)
 
 _BATCH_SIZE = 500
 _MAX_WORKERS = 4
+
+
+def _count_anomalies(output_dir: Path) -> int:
+    """Count files with detected anomalies by scanning metadata files."""
+    count = 0
+    for meta_path in output_dir.rglob("*.metadata.json"):
+        try:
+            with meta_path.open() as f:
+                meta = json.load(f)
+            if meta.get("is_anomaly"):
+                count += 1
+        except (json.JSONDecodeError, OSError):
+            pass
+    return count
 
 
 def _try_process_file(
@@ -46,6 +61,11 @@ def _try_process_file(
         meta["source_era"] = get_source_era(term)
 
         samples, sr = load_audio(audio_path)
+
+        # Detect audio anomalies (silence, constant noise)
+        anomaly_info = detect_anomalies(samples, sr)
+        meta.update(anomaly_info)
+
         flac_path = out_dir / f"{recording_id}.flac"
         save_audio(samples, sr, flac_path, format="flac", bits_per_sample=bits)
 
@@ -98,12 +118,16 @@ def _process_recording(
 
 
 def _filter_pending_sources(
-    sources: dict[tuple[str, str, str], AudioSource], output_dir: Path
+    sources: dict[tuple[str, str, str], AudioSource],
+    output_dir: Path,
+    *,
+    force: bool = False,
 ) -> tuple[list[AudioSource], int]:
-    """Filter out already processed recordings."""
+    """Filter out already processed recordings (unless force=True)."""
+    if force:
+        return list(sources.values()), 0
     pending, skipped = [], 0
-    for key, source in sources.items():
-        term, docket, rec_id = key
+    for (term, docket, rec_id), source in sources.items():
         if (output_dir / term / docket / f"{rec_id}.flac").exists():
             skipped += 1
         else:
@@ -184,12 +208,12 @@ def add_audio_command(app: typer.Typer) -> None:
                 help="Parallel workers (default: min(CPUs, 4), ~1GB RAM each)",
             ),
         ] = 0,
+        force: Annotated[
+            bool,
+            typer.Option("--force", "-F", help="Reprocess existing files"),
+        ] = False,
     ) -> None:
-        """Process cached audio into standardized FLAC format with metadata.
-
-        Memory: Uses ~1GB RAM per worker for large audio files (2+ hours).
-        With chunked decoding optimization, peak memory is ~1x final array size.
-        """
+        """Process cached audio into FLAC format with metadata and anomaly detection."""
         cpu_workers = os.cpu_count() or 1
         num_workers = workers if workers > 0 else min(cpu_workers, _MAX_WORKERS)
 
@@ -199,6 +223,8 @@ def add_audio_command(app: typer.Typer) -> None:
         if terms:
             console.print(f"  Terms: {', '.join(terms)}")
         console.print(f"  FLAC bit depth: {bits}, Workers: {num_workers}")
+        if force:
+            console.print("  [yellow]Force mode: reprocessing existing files[/yellow]")
         console.print()
 
         sources = find_audio_sources(cache_dir, terms)
@@ -207,7 +233,7 @@ def add_audio_command(app: typer.Typer) -> None:
             return
 
         console.print(f"Found {len(sources)} unique recordings")
-        pending, skipped = _filter_pending_sources(sources, output_dir)
+        pending, skipped = _filter_pending_sources(sources, output_dir, force=force)
 
         if skipped > 0:
             console.print(f"  Skipped (existing): {skipped}")
@@ -226,4 +252,13 @@ def add_audio_command(app: typer.Typer) -> None:
         console.print(f"[bold green]Done![/bold green] Processed {processed} files.")
         if errors > 0:
             console.print(f"[yellow]Errors:[/yellow] {errors} files failed")
+
+        # Report anomaly statistics
+        anomaly_count = _count_anomalies(output_dir)
+        if anomaly_count > 0:
+            console.print(
+                f"[yellow]Anomalies:[/yellow] {anomaly_count} files detected "
+                "(see metadata.json for details)"
+            )
+
         console.print(f"Output: {output_dir}")
