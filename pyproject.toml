@@ -34,7 +34,7 @@ urls = { Homepage = "https://github.com/AlonKellner/oyez_sa_asr.git", Repository
 scripts.oyez_sa_asr = "oyez_sa_asr.cli:app"
 
 [dependency-groups]
-dev = [ "coverage[toml]", "pytest", "pytest-asyncio", "pytest-cov" ]
+dev = [ "coverage[toml]", "ipykernel", "pytest", "pytest-asyncio", "pytest-cov" ]
 
 [tool.hatch.build.targets.wheel]
 packages = [ "src/oyez_sa_asr" ]
