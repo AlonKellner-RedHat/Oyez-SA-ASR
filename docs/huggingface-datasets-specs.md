@@ -63,17 +63,34 @@ CLI: `oyez dataset simple`
 
 ```text
 oyez-sa-asr-simple/
-└── data/
-    └── utterances/train-*.parquet   # Audio embedded
+├── oyez_sa_asr.py              # HuggingFace loading script
+├── README.md                   # Dataset card
+├── lt1m/data/utterances/       # < 1 minute utterances
+├── lt5m/data/utterances/       # 1-5 minute utterances
+└── lt30m/data/utterances/      # 5-30 minute utterances
 ```
 
-### Utterances Schema
+### Usage
+
+```python
+from datasets import load_dataset
+
+# Standard HuggingFace pattern
+ds = load_dataset("path/to/datasets/simple", split="lt1m")
+sample = ds[0]
+print(sample["audio"]["array"])  # Decoded numpy array
+print(sample["sentence"])        # Transcription
+```
+
+### Utterances Schema (HuggingFace-aligned)
 
 | Column | Type | Description |
 |--------|------|-------------|
-| audio | Audio | Embedded FLAC bytes |
-| text | string | Transcript |
-| speaker_name | string | Speaker name |
+| id | string | Unique utterance ID |
+| audio | Audio | Embedded FLAC bytes (auto-decoded) |
+| sentence | string | Transcript |
+| speaker | string | Speaker name |
+| duration | float | Duration in seconds |
 | term | string | Court term |
 | docket | string | Docket number |
 | start_sec | float | Start timestamp |

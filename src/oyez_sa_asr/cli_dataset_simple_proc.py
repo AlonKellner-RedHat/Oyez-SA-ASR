@@ -27,12 +27,7 @@ logger = logging.getLogger(__name__)
 def group_utterances_by_recording(
     utterances: list[dict[str, Any]],
 ) -> dict[tuple[str, str], list[dict[str, Any]]]:
-    """Group utterances by recording (term, docket).
-
-    Returns
-    -------
-        Dictionary mapping (term, docket) to list of utterances.
-    """
+    """Group utterances by recording (term, docket)."""
     grouped: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for utt in utterances:
         key = (utt["term"], utt["docket"])
@@ -43,10 +38,7 @@ def group_utterances_by_recording(
 def process_single_recording(
     args: tuple[tuple[str, str], list[dict[str, Any]], Path],
 ) -> tuple[list[dict[str, Any]], int]:
-    """Process a single recording and return embedded rows.
-
-    This function is designed to be called in parallel processes.
-    It catches all exceptions to prevent worker crashes.
+    """Process a single recording (parallel worker). Returns (rows, error_count).
 
     Args:
         args: Tuple of (key, utterances, audio_path) where key is (term, docket).
@@ -97,15 +89,20 @@ def _process_single_recording_impl(
     for utt, audio_bytes in zip(rec_utterances, segment_bytes_list, strict=True):
         term = utt.get("term", key[0])
         docket = utt.get("docket", key[1])
-        segment_name = f"{term}_{docket}_{utt.get('start_sec', 0):.1f}.flac"
+        start_sec = utt.get("start_sec", 0)
+        end_sec = utt.get("end_sec", 0)
+        segment_name = f"{term}_{docket}_{start_sec:.2f}.flac"
+        # HuggingFace-aligned schema (Edited by Claude)
         row = {
+            "id": f"{term}_{docket}_{start_sec:.2f}",
             "audio": {"bytes": audio_bytes, "path": segment_name},
-            "text": utt.get("text", ""),
-            "speaker_name": utt.get("speaker_name"),
+            "sentence": utt.get("text", ""),
+            "speaker": utt.get("speaker_name"),
+            "duration": end_sec - start_sec if end_sec and start_sec else 0.0,
             "term": term,
             "docket": docket,
-            "start_sec": utt.get("start_sec"),
-            "end_sec": utt.get("end_sec"),
+            "start_sec": start_sec,
+            "end_sec": end_sec,
         }
         rows.append(row)
 

@@ -57,7 +57,7 @@ omit = [ "src/oyez_sa_asr/__init__.py" ]
 python = "./.venv"
 
 [tool.ty.src]
-exclude = [ "./.ties/**", "./.claude/**", "./scripts/**" ]
+exclude = [ "./.ties/**", "./.claude/**", "./scripts/**", "./notebooks/**" ]
 
 [tool.rumdl]
 disable = [ "MD052" ]
