@@ -3,6 +3,7 @@
 
 import gc
 import logging
+import multiprocessing as mp
 from collections import defaultdict
 from concurrent.futures import BrokenExecutor, ProcessPoolExecutor, as_completed
 from pathlib import Path
@@ -20,6 +21,14 @@ from .memory_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Use spawn context to avoid issues with forking multithreaded programs
+# and ensure proper PR_SET_PDEATHSIG behavior (workers die when main dies).
+# Falls back to default context if spawn is unavailable.
+try:
+    _MP_CONTEXT = mp.get_context("spawn")
+except ValueError:
+    _MP_CONTEXT = None  # Will use default context
 
 
 def group_utterances_by_recording(
@@ -189,7 +198,11 @@ def process_by_recording(
 
     executor = None
     try:
-        executor = ProcessPoolExecutor(max_workers=workers, initializer=set_pdeathsig)
+        executor = ProcessPoolExecutor(
+            max_workers=workers,
+            mp_context=_MP_CONTEXT,
+            initializer=set_pdeathsig,
+        )
         futures = {
             executor.submit(process_single_recording, item): item for item in work_items
         }

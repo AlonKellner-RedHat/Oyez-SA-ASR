@@ -2,6 +2,7 @@
 """Process audio subcommand for oyez_sa_asr CLI."""
 
 import json
+import multiprocessing as mp
 import os
 import random
 from concurrent.futures import BrokenExecutor, ProcessPoolExecutor, as_completed
@@ -21,6 +22,14 @@ from .audio_source import (
 )
 from .audio_utils import get_audio_metadata, load_audio, save_audio
 from .memory_utils import set_pdeathsig
+
+# Use spawn context to avoid issues with forking multithreaded programs
+# and ensure proper PR_SET_PDEATHSIG behavior (workers die when main dies).
+# Falls back to default context if spawn is unavailable.
+try:
+    _MP_CONTEXT = mp.get_context("spawn")
+except ValueError:
+    _MP_CONTEXT = None  # Will use default context
 
 console = Console(force_terminal=True)
 
@@ -148,7 +157,11 @@ def _run_parallel_sources(
         for batch_start in range(0, len(shuffled), _BATCH_SIZE):
             batch = shuffled[batch_start : batch_start + _BATCH_SIZE]
 
-            with ProcessPoolExecutor(max_workers=num_workers, initializer=set_pdeathsig) as executor:
+            with ProcessPoolExecutor(
+                max_workers=num_workers,
+                mp_context=_MP_CONTEXT,
+                initializer=set_pdeathsig,
+            ) as executor:
                 futures = {
                     executor.submit(_process_recording, src, output_dir, bits): src
                     for src in batch
