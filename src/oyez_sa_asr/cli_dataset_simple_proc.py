@@ -1,8 +1,5 @@
-# Edited by Claude
-"""Processing helpers for dataset simple command.
-
-Contains the parallel processing logic for embedding audio segments.
-"""
+# Edited by Claude, Cursor
+"""Processing helpers for simple dataset with parallel audio embedding."""
 
 import gc
 import logging
@@ -28,11 +25,7 @@ logger = logging.getLogger(__name__)
 def group_utterances_by_recording(
     utterances: list[dict[str, Any]],
 ) -> dict[tuple[str, str, str], list[dict[str, Any]]]:
-    """Group utterances by recording (term, docket, transcript_type).
-
-    Edited by Claude: Changed key from (term, docket) to (term, docket, transcript_type)
-    to correctly match recordings when a case has multiple recording types.
-    """
+    """Group utterances by recording (term, docket, transcript_type)."""
     grouped: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
     for utt in utterances:
         key = (utt["term"], utt["docket"], utt.get("transcript_type", "unknown"))
@@ -43,18 +36,7 @@ def group_utterances_by_recording(
 def process_single_recording(
     args: tuple[tuple[str, str, str], list[dict[str, Any]], Path],
 ) -> tuple[list[dict[str, Any]], int]:
-    """Process a single recording (parallel worker). Returns (rows, error_count).
-
-    Edited by Claude: Changed key from (term, docket) to (term, docket, transcript_type).
-
-    Args:
-        args: Tuple of (key, utterances, audio_path) where key is
-              (term, docket, transcript_type).
-
-    Returns
-    -------
-        Tuple of (list of row dicts, error_count).
-    """
+    """Process a single recording (parallel worker). Returns (rows, error_count)."""
     key, rec_utterances, audio_path = args
 
     try:
@@ -70,10 +52,7 @@ def _process_single_recording_impl(
     rec_utterances: list[dict[str, Any]],
     audio_path: Path,
 ) -> tuple[list[dict[str, Any]], int]:
-    """Process a single recording (implementation).
-
-    Edited by Claude: Changed key from (term, docket) to (term, docket, transcript_type).
-    """
+    """Process a single recording (implementation)."""
     # Filter out utterances with missing or invalid time ranges
     valid_utterances = []
     segments = []
@@ -103,13 +82,15 @@ def _process_single_recording_impl(
         start_sec = utt.get("start_sec", 0)
         end_sec = utt.get("end_sec", 0)
         segment_name = f"{term}_{docket}_{start_sec:.2f}.flac"
-        # HuggingFace-aligned schema (Edited by Claude)
+        # HuggingFace-aligned schema (Edited by Claude, Cursor)
         row = {
             "id": f"{term}_{docket}_{start_sec:.2f}",
             "audio": {"bytes": audio_bytes, "path": segment_name},
             "sentence": utt.get("text", ""),
             "speaker": utt.get("speaker_name"),
-            "duration": end_sec - start_sec if end_sec and start_sec else 0.0,
+            "duration": (end_sec - start_sec)
+            if end_sec is not None and start_sec is not None
+            else 0.0,
             "term": term,
             "docket": docket,
             "start_sec": start_sec,
@@ -124,10 +105,7 @@ def _build_work_items(
     utterances: list[dict[str, Any]],
     audio_paths: dict[tuple[str, str, str], Path],
 ) -> tuple[list[tuple[tuple[str, str, str], list[dict[str, Any]], Path]], int]:
-    """Build work items for parallel processing.
-
-    Edited by Claude: Changed key from (term, docket) to (term, docket, transcript_type).
-    """
+    """Build work items for parallel processing."""
     grouped = group_utterances_by_recording(utterances)
     work_items = []
     skipped_count = 0
