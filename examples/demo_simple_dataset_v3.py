@@ -53,7 +53,7 @@ def main() -> None:
         return
 
     try:
-        from datasets import load_dataset  # noqa: PLC0415
+        from datasets import Audio, load_dataset  # noqa: PLC0415
     except ImportError:
         print("Error: 'datasets' package required. Install with: uv add datasets")
         return
@@ -64,11 +64,13 @@ def main() -> None:
     print("since it uses parquet auto-discovery with embedded audio.")
 
     # Load with trust_remote_code (works in both v3.x and v4.x)
+    # Use decode=False to avoid torchcodec requirement on some platforms
     ds = load_dataset(
         str(args.dataset_dir),
         args.split,
         trust_remote_code=True,  # Optional for simple dataset
     )
+    ds = ds.cast_column("audio", Audio(decode=False))
 
     print(f"\nLoaded {len(ds['train']):,} utterances")
 
@@ -86,9 +88,8 @@ def main() -> None:
         print(f"    Sentence: {sentence}...")
 
         audio = sample.get("audio")
-        if audio:
-            actual_dur = len(audio["array"]) / audio["sampling_rate"]
-            print(f"    Audio: {actual_dur:.1f}s @ {audio['sampling_rate']} Hz")
+        if audio and audio.get("bytes"):
+            print(f"    Audio: {len(audio['bytes']):,} bytes (embedded)")
 
     # Calculate total duration
     total_dur = sum(s.get("duration", 0) or 0 for s in ds["train"])
