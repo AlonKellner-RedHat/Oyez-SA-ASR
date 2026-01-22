@@ -9,7 +9,78 @@ from oyez_sa_asr.audio_source import (
     get_preferred_format,
     get_recording_id,
     get_source_era,
+    parse_transcript_type_from_recording_id,
 )
+
+
+class TestParseTranscriptTypeFromRecordingId:
+    """Tests for parse_transcript_type_from_recording_id function.
+
+    Edited by Claude: Added tests for audio-transcript type matching fix.
+    """
+
+    def test_modern_argument(self) -> None:
+        """Parses oral_argument from modern format."""
+        assert (
+            parse_transcript_type_from_recording_id("21-86_20221107-argument")
+            == "oral_argument"
+        )
+
+    def test_modern_opinion(self) -> None:
+        """Parses opinion from modern format."""
+        assert (
+            parse_transcript_type_from_recording_id("22-166_20230525-opinion")
+            == "opinion"
+        )
+
+    def test_modern_opinion_dissent(self) -> None:
+        """Parses dissent from modern format."""
+        assert (
+            parse_transcript_type_from_recording_id("21-476_20230630-opinion-dissent")
+            == "dissent"
+        )
+
+    def test_modern_opinion_concurrence(self) -> None:
+        """Parses concurrence from modern format."""
+        assert (
+            parse_transcript_type_from_recording_id(
+                "20-1199_20230629-opinion-concurrence"
+            )
+            == "concurrence"
+        )
+
+    def test_modern_opinion_concur(self) -> None:
+        """Parses concurrence from concur variant."""
+        assert (
+            parse_transcript_type_from_recording_id("23-726_20240627-opinion-concur")
+            == "concurrence"
+        )
+
+    def test_legacy_argument(self) -> None:
+        """Parses oral_argument from legacy format (a suffix)."""
+        assert (
+            parse_transcript_type_from_recording_id("20000418a_99-224")
+            == "oral_argument"
+        )
+
+    def test_legacy_opinion(self) -> None:
+        """Parses opinion from legacy format (o suffix)."""
+        assert parse_transcript_type_from_recording_id("20000619o_99-224") == "opinion"
+
+    def test_legacy_reargument(self) -> None:
+        """Parses oral_argument from legacy reargument (r suffix)."""
+        assert (
+            parse_transcript_type_from_recording_id("20000329r_98-6322")
+            == "oral_argument"
+        )
+
+    def test_unknown_format(self) -> None:
+        """Returns unknown for unrecognized format."""
+        assert parse_transcript_type_from_recording_id("random-id") == "unknown"
+
+    def test_empty_string(self) -> None:
+        """Returns unknown for empty string."""
+        assert parse_transcript_type_from_recording_id("") == "unknown"
 
 
 class TestGetRecordingId:

@@ -1,10 +1,54 @@
 # Edited by Claude
 """Audio source discovery and era-aware format selection."""
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
 _DIGITAL_ERA_START = 2006  # First term recorded directly to MP3
+
+# Modern format patterns (post-2005): {docket}_{date}-{type}
+_MODERN_TYPE_PATTERNS = {
+    "-opinion-dissent": "dissent",
+    "-opinion-concurrence": "concurrence",
+    "-opinion-concur": "concurrence",
+    "-opinion": "opinion",
+    "-argument": "oral_argument",
+}
+
+# Legacy format pattern: {date}{suffix}_{docket}
+_LEGACY_SUFFIX_MAP = {
+    "a": "oral_argument",  # argument
+    "o": "opinion",  # opinion
+    "r": "oral_argument",  # reargument (treat as oral argument)
+}
+
+
+def parse_transcript_type_from_recording_id(recording_id: str) -> str:
+    """Parse transcript_type from recording_id.
+
+    Edited by Claude.
+
+    Handles two formats:
+    - Modern: {docket}_{date}-{type} e.g., 21-86_20221107-argument
+    - Legacy: {date}{suffix}_{docket} e.g., 20000418a_99-224
+
+    Returns
+    -------
+        One of: oral_argument, opinion, dissent, concurrence, unknown
+    """
+    # Try modern format first (check longest patterns first)
+    for pattern, transcript_type in _MODERN_TYPE_PATTERNS.items():
+        if pattern in recording_id:
+            return transcript_type
+
+    # Try legacy format: {date}{suffix}_{docket}
+    match = re.match(r"^\d{8}([a-z])_", recording_id)
+    if match:
+        suffix = match.group(1)
+        return _LEGACY_SUFFIX_MAP.get(suffix, "unknown")
+
+    return "unknown"
 
 
 def get_recording_id(path: Path) -> str:

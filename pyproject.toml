@@ -73,6 +73,7 @@ exclude = [ "./.ties/**", "./.claude/**", "./scripts/**", "./notebooks/**" ]
 disable = [ "MD052" ]
 
 [tool.lintok]
+# Edited by Claude: Added notebooks and test file to exclusions
 max_tokens = 2048
 exclude = [
   "uv.lock",
@@ -81,6 +82,8 @@ exclude = [
   "requirements.txt",
   "src/oyez_sa_asr/cli_dataset_helpers.py",
   "src/oyez_sa_asr/loaders.py",
+  "notebooks/*.ipynb",                      # Notebooks contain output with audio data
+  "tests/test_cli_dataset_simple.py",
 ]
 
 [tool.typos.files]

@@ -10,6 +10,7 @@ import typer
 from rich.console import Console
 from tqdm import tqdm
 
+from .audio_source import parse_transcript_type_from_recording_id
 from .term_filter import filter_dirs
 
 console = Console(force_terminal=True)
@@ -196,12 +197,19 @@ def collect_recordings(
 
                     flac_name = meta_file.stem.replace(".metadata", "") + ".flac"
                     flac_path = docket_dir / flac_name
+                    recording_id = meta_file.stem.replace(".metadata", "")
+
+                    # Edited by Claude: Add transcript_type from recording_id
+                    transcript_type = parse_transcript_type_from_recording_id(
+                        recording_id
+                    )
 
                     records.append(
                         {
                             "term": term_dir.name,
                             "docket": docket_dir.name,
-                            "recording_id": meta_file.stem.replace(".metadata", ""),
+                            "recording_id": recording_id,
+                            "transcript_type": transcript_type,
                             "audio_path": str(flac_path.relative_to(audio_dir)),
                             "duration_sec": meta.get("duration"),
                             "sample_rate": meta.get("sample_rate"),

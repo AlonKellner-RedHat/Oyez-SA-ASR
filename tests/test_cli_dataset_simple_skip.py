@@ -35,11 +35,13 @@ def _create_flex_dataset(flex_dir: Path) -> None:
 
     _create_test_flac(audio_subdir / "20240101a.flac", duration_sec=5.0)
 
+    # Edited by Claude: Added transcript_type field
     recordings = [
         {
             "term": "2024",
             "docket": "22-123",
             "recording_id": "20240101a",
+            "transcript_type": "oral_argument",
             "audio_path": "2024/22-123/20240101a.flac",
         }
     ]

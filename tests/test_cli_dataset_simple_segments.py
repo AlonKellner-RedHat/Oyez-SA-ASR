@@ -41,11 +41,13 @@ class TestDatasetSimpleWithSegments:
             flac_path = audio_subdir / "20240101a.flac"
             _create_test_flac(flac_path, duration_sec=10.0)
 
+            # Edited by Claude: Added transcript_type field
             recordings = [
                 {
                     "term": "2024",
                     "docket": "22-123",
                     "recording_id": "20240101a",
+                    "transcript_type": "oral_argument",
                     "audio_path": "2024/22-123/20240101a.flac",
                 }
             ]

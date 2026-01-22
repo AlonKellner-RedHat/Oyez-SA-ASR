@@ -47,11 +47,13 @@ class TestParallelProcessing:
 
             _create_test_flac(audio_subdir / "20240101a.flac", duration_sec=5.0)
 
+            # Edited by Claude: Added transcript_type field
             recordings = [
                 {
                     "term": "2024",
                     "docket": "22-123",
                     "recording_id": "20240101a",
+                    "transcript_type": "oral_argument",
                     "audio_path": "2024/22-123/20240101a.flac",
                 }
             ]
@@ -125,11 +127,13 @@ class TestParallelProcessing:
                     audio_subdir / f"recording_{i}.flac", duration_sec=5.0
                 )
 
+                # Edited by Claude: Added transcript_type field
                 recordings.append(
                     {
                         "term": "2024",
                         "docket": docket,
                         "recording_id": f"recording_{i}",
+                        "transcript_type": "oral_argument",
                         "audio_path": f"2024/{docket}/recording_{i}.flac",
                     }
                 )

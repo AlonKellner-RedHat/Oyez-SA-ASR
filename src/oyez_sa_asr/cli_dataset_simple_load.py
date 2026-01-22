@@ -84,9 +84,13 @@ def load_and_filter_utterances(
 
 def build_audio_paths(
     flex_dir: Path, pq: Any, audio_dir: Path, terms: list[str] | None = None
-) -> dict[tuple[str, str], Path]:
-    """Build audio path lookup from recordings."""
-    audio_paths: dict[tuple[str, str], Path] = {}
+) -> dict[tuple[str, str, str], Path]:
+    """Build audio path lookup from recordings.
+
+    Edited by Claude: Changed key from (term, docket) to (term, docket, transcript_type)
+    to correctly match recordings when a case has multiple recording types.
+    """
+    audio_paths: dict[tuple[str, str, str], Path] = {}
     recordings_pq = flex_dir / "data" / "recordings.parquet"
     if not recordings_pq.exists():
         return audio_paths
@@ -95,7 +99,8 @@ def build_audio_paths(
     for rec in pq.read_table(recordings_pq).to_pylist():
         if term_set and rec["term"] not in term_set:
             continue
-        key = (rec["term"], rec["docket"])
+        # Use 3-tuple key to distinguish oral_argument vs opinion recordings
+        key = (rec["term"], rec["docket"], rec.get("transcript_type", "unknown"))
         path = audio_dir / rec["audio_path"]
         if path.exists():
             audio_paths[key] = path

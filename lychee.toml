@@ -1,5 +1,8 @@
 # Lychee link checker configuration
+# Edited by Claude
 exclude = [
+  # ipywidgets URL gets mangled with \n in notebook JSON output
+  '^https://ipywidgets\.readthedocs\.io.*',
   '^https://numpydoc.readthedocs\.io.*',
   '^https://.*pepy\.tech*',
   '^https://github\.com/AlonKellner/oyez_sa_asr*',
