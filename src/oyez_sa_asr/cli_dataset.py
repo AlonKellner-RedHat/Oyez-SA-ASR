@@ -8,6 +8,7 @@ import typer
 from rich.console import Console
 
 from .cli_dataset_helpers import (
+    collect_raw_recordings,
     collect_recordings,
     collect_utterances,
     copy_raw_audio,
@@ -84,11 +85,24 @@ def dataset_raw(
     # Save incomplete state before starting
     save_state(output_dir, current_state)
 
+    pa, pq = require_pyarrow()
     term_set = set(terms) if terms else None
 
     total = copy_raw_audio(cache_dir, output_dir, terms)
     total += copy_raw_cases(cache_dir, output_dir, term_set)
     total += copy_raw_transcripts(cache_dir, output_dir, term_set)
+
+    # Create recordings parquet for HuggingFace auto-discovery
+    audio_dir = output_dir / "audio"
+    parquet_dir = output_dir / "data"
+    parquet_dir.mkdir(parents=True, exist_ok=True)
+
+    console.print("Creating recordings.parquet for HuggingFace...")
+    recordings = collect_raw_recordings(audio_dir, terms)
+    if recordings:
+        table = pa.Table.from_pylist(recordings)
+        pq.write_table(table, parquet_dir / "recordings.parquet")
+        console.print(f"  {len(recordings)} recordings")
 
     # Mark as complete
     current_state.completed = True

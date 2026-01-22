@@ -13,30 +13,36 @@ from oyez_sa_asr.loaders import extract_segment, load_flex, load_raw, load_simpl
 class TestLoadRaw:
     """Tests for load_raw function."""
 
-    def test_returns_dict_with_expected_keys(self, tmp_path: Path) -> None:
-        """Returns dict with audio_files, transcripts, cases."""
+    def test_returns_list_of_items(self, tmp_path: Path) -> None:
+        """Returns list of recording items."""
         (tmp_path / "audio").mkdir()
         (tmp_path / "transcripts").mkdir()
         (tmp_path / "cases").mkdir()
 
         result = load_raw(tmp_path)
 
-        assert "audio_files" in result
-        assert "transcripts" in result
-        assert "cases" in result
+        assert isinstance(result, list)
 
-    def test_finds_audio_files(self, tmp_path: Path) -> None:
-        """Finds MP3 and OGG files."""
-        audio_dir = tmp_path / "audio"
-        audio_dir.mkdir()
-        (audio_dir / "test.mp3").touch()
-        (audio_dir / "test.ogg").touch()
+    def test_finds_audio_files_with_expected_keys(self, tmp_path: Path) -> None:
+        """Finds MP3 and OGG files and returns items with expected keys."""
+        audio_dir = tmp_path / "audio" / "2024" / "22-1"
+        audio_dir.mkdir(parents=True)
+        (audio_dir / "test_recording.delivery.mp3").touch()
+        (audio_dir / "test_recording.ogg").touch()
         (tmp_path / "transcripts").mkdir()
         (tmp_path / "cases").mkdir()
 
         result = load_raw(tmp_path)
 
-        assert len(result["audio_files"]) == 2
+        assert len(result) == 1
+        item = result[0]
+        assert item["recording_id"] == "test_recording"
+        assert item["term"] == "2024"
+        assert item["docket"] == "22-1"
+        assert item["audio_path"] is not None
+        assert item["audio_ogg_path"] is not None
+        assert "transcript_path" in item
+        assert "case_path" in item
 
 
 class TestLoadFlex:

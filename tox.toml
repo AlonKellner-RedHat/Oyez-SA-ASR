@@ -1,4 +1,4 @@
-env_list = [ "py313", "path", "coverage" ]
+env_list = [ "py313", "path", "coverage", "hf-v4", "hf-v3" ]
 
 [env_run_base]
 runner = "uv-venv-lock-runner"
@@ -38,4 +38,42 @@ commands = [
     "--cov=src/oyez_sa_asr",
     "--cov-fail-under=95",
   ],
+]
+
+# HuggingFace datasets v4.x environment (parquet auto-discovery)
+[env.hf-v4]
+description = "Test with HuggingFace datasets v4.x"
+base_python = [ "py313" ]
+runner = "uv-venv-runner"
+deps = [
+  "datasets>=4.0",
+  "pytest",
+  "pytest-asyncio",
+  "packaging",
+  "pyarrow",
+  "av",
+  "numpy",
+]
+commands = [
+  [ "pytest", "tests/test_hf_compat.py", "tests/test_loaders_hf.py", "tests/test_hf_v4.py", "-v" ],
+]
+
+# HuggingFace datasets v3.x environment (loading scripts)
+[env.hf-v3]
+description = "Test with HuggingFace datasets v3.x"
+base_python = [ "py313" ]
+runner = "uv-venv-runner"
+deps = [
+  "datasets>=3.0,<4.0",
+  "pytest",
+  "pytest-asyncio",
+  "packaging",
+  "pyarrow",
+  "av",
+  "numpy",
+  "librosa",
+  "soundfile",
+]
+commands = [
+  [ "pytest", "tests/test_hf_compat.py", "tests/test_loaders_hf.py", "tests/test_hf_v3.py", "-v" ],
 ]
