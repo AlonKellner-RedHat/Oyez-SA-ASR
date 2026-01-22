@@ -18,7 +18,8 @@ from .memory_utils import (
     check_oom,
     get_memory_usage_mb,
     get_oom_kill_count,
-    kill_orphan_forkservers,
+    kill_orphan_workers,
+    set_pdeathsig,
 )
 
 logger = logging.getLogger(__name__)
@@ -26,22 +27,29 @@ logger = logging.getLogger(__name__)
 
 def group_utterances_by_recording(
     utterances: list[dict[str, Any]],
-) -> dict[tuple[str, str], list[dict[str, Any]]]:
-    """Group utterances by recording (term, docket)."""
-    grouped: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+) -> dict[tuple[str, str, str], list[dict[str, Any]]]:
+    """Group utterances by recording (term, docket, transcript_type).
+
+    Edited by Claude: Changed key from (term, docket) to (term, docket, transcript_type)
+    to correctly match recordings when a case has multiple recording types.
+    """
+    grouped: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
     for utt in utterances:
-        key = (utt["term"], utt["docket"])
+        key = (utt["term"], utt["docket"], utt.get("transcript_type", "unknown"))
         grouped[key].append(utt)
     return dict(grouped)
 
 
 def process_single_recording(
-    args: tuple[tuple[str, str], list[dict[str, Any]], Path],
+    args: tuple[tuple[str, str, str], list[dict[str, Any]], Path],
 ) -> tuple[list[dict[str, Any]], int]:
     """Process a single recording (parallel worker). Returns (rows, error_count).
 
+    Edited by Claude: Changed key from (term, docket) to (term, docket, transcript_type).
+
     Args:
-        args: Tuple of (key, utterances, audio_path) where key is (term, docket).
+        args: Tuple of (key, utterances, audio_path) where key is
+              (term, docket, transcript_type).
 
     Returns
     -------
@@ -58,11 +66,14 @@ def process_single_recording(
 
 
 def _process_single_recording_impl(
-    key: tuple[str, str],
+    key: tuple[str, str, str],
     rec_utterances: list[dict[str, Any]],
     audio_path: Path,
 ) -> tuple[list[dict[str, Any]], int]:
-    """Process a single recording (implementation)."""
+    """Process a single recording (implementation).
+
+    Edited by Claude: Changed key from (term, docket) to (term, docket, transcript_type).
+    """
     # Filter out utterances with missing or invalid time ranges
     valid_utterances = []
     segments = []
@@ -111,9 +122,12 @@ def _process_single_recording_impl(
 
 def _build_work_items(
     utterances: list[dict[str, Any]],
-    audio_paths: dict[tuple[str, str], Path],
-) -> tuple[list[tuple[tuple[str, str], list[dict[str, Any]], Path]], int]:
-    """Build work items for parallel processing."""
+    audio_paths: dict[tuple[str, str, str], Path],
+) -> tuple[list[tuple[tuple[str, str, str], list[dict[str, Any]], Path]], int]:
+    """Build work items for parallel processing.
+
+    Edited by Claude: Changed key from (term, docket) to (term, docket, transcript_type).
+    """
     grouped = group_utterances_by_recording(utterances)
     work_items = []
     skipped_count = 0
@@ -166,7 +180,7 @@ class _ShardWriter:
 
 def process_by_recording(
     utterances: list[dict[str, Any]],
-    audio_paths: dict[tuple[str, str], Path],
+    audio_paths: dict[tuple[str, str, str], Path],
     output_dir: Path,
     shard_size_mb: int,
     pa: Any,
@@ -174,7 +188,7 @@ def process_by_recording(
     workers: int = 1,
 ) -> dict[str, int]:
     """Process utterances grouped by recording for efficiency."""
-    kill_orphan_forkservers()
+    kill_orphan_workers()
 
     initial_oom = get_oom_kill_count()
     used_mb, available_mb, _ = get_memory_usage_mb()
@@ -197,7 +211,7 @@ def process_by_recording(
 
     executor = None
     try:
-        executor = ProcessPoolExecutor(max_workers=workers)
+        executor = ProcessPoolExecutor(max_workers=workers, initializer=set_pdeathsig)
         futures = {
             executor.submit(process_single_recording, item): item for item in work_items
         }

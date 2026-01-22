@@ -20,6 +20,7 @@ from .audio_source import (
     get_source_era,
 )
 from .audio_utils import get_audio_metadata, load_audio, save_audio
+from .memory_utils import set_pdeathsig
 
 console = Console(force_terminal=True)
 
@@ -147,7 +148,7 @@ def _run_parallel_sources(
         for batch_start in range(0, len(shuffled), _BATCH_SIZE):
             batch = shuffled[batch_start : batch_start + _BATCH_SIZE]
 
-            with ProcessPoolExecutor(max_workers=num_workers) as executor:
+            with ProcessPoolExecutor(max_workers=num_workers, initializer=set_pdeathsig) as executor:
                 futures = {
                     executor.submit(_process_recording, src, output_dir, bits): src
                     for src in batch
