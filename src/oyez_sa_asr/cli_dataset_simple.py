@@ -50,6 +50,10 @@ def dataset_simple(
         int,
         typer.Option("--shard-size", "-s", help="Shard size in MB"),
     ] = 100,
+    max_workers: Annotated[
+        int | None,
+        typer.Option("--max-workers", "-W", help="Max workers per step"),
+    ] = None,
     force: Annotated[
         bool,
         typer.Option("--force", "-F", help="Force regeneration"),
@@ -60,16 +64,19 @@ def dataset_simple(
     ] = False,
 ) -> None:
     """Create all three simple dataset splits (lt1m, lt5m, lt30m) sequentially."""
+    if max_workers is not None and max_workers < 1:
+        raise typer.BadParameter("--max-workers must be at least 1")
+
     console.print("[bold]Running all simple dataset splits sequentially[/bold]\n")
 
-    # lt1m: [0, 60s) with 8 workers
+    # lt1m: [0, 60s) with up to 8 workers
     console.print("[cyan]━━━ Step 1/3: lt1m (<1 min) ━━━[/cyan]")
     run_simple_dataset(
         flex_dir,
         output_dir / "lt1m",
         terms,
         shard_size_mb,
-        8,
+        min(8, max_workers) if max_workers else 8,
         force,
         include_invalid,
         0,
@@ -77,14 +84,14 @@ def dataset_simple(
         "oyez dataset simple-lt1m",
     )
 
-    # lt5m: [60s, 300s) with 4 workers
+    # lt5m: [60s, 300s) with up to 4 workers
     console.print("\n[cyan]━━━ Step 2/3: lt5m (1-5 min) ━━━[/cyan]")
     run_simple_dataset(
         flex_dir,
         output_dir / "lt5m",
         terms,
         shard_size_mb,
-        4,
+        min(4, max_workers) if max_workers else 4,
         force,
         include_invalid,
         60,
@@ -92,14 +99,14 @@ def dataset_simple(
         "oyez dataset simple-lt5m",
     )
 
-    # lt30m: [300s, 1800s) with 1 worker
+    # lt30m: [300s, 1800s) with up to 1 worker
     console.print("\n[cyan]━━━ Step 3/3: lt30m (5-30 min) ━━━[/cyan]")
     run_simple_dataset(
         flex_dir,
         output_dir / "lt30m",
         terms,
         shard_size_mb,
-        1,
+        min(1, max_workers) if max_workers else 1,
         force,
         include_invalid,
         300,
