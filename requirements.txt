@@ -1549,9 +1549,9 @@ requests==2.32.5 \
     --hash=sha256:2462f94637a34fd532264295e186976db0f5d453d1cdd31473c85a6a161affb6 \
     --hash=sha256:dbba0bac56e100853db0ea71b82b4dfd5fe2bf6d3754a8893c3af500cec7d7cf
     # via datasets
-rich==14.2.0 \
-    --hash=sha256:73ff50c7c0c1c77c8243079283f4edb376f0f6442433aecb8ce7e6d0b92d1fe4 \
-    --hash=sha256:76bc51fe2e57d2b1be1f96c524b890b816e334ab4c1e45888799bfaab0021edd
+rich==14.3.0 \
+    --hash=sha256:0b8c1e368c1125b9e993c2d2f1342802525f4853fc6dac2e8e9e88bac0f45bce \
+    --hash=sha256:b75e54d3abbcc49137e83e4db54dc86c5e47687eebc95aa0305363231a36e699
     # via typer
 shellingham==1.5.4 \
     --hash=sha256:7ecfff8f2fd72616f7481040475a65b2bf8af90a56c89140852d1120324e8686 \
@@ -1682,9 +1682,9 @@ urllib3==2.6.3 \
     # via
     #   botocore
     #   requests
-wcwidth==0.3.2 \
-    --hash=sha256:817abc6a89e47242a349b5d100cbd244301690d6d8d2ec6335f26fe6640a6315 \
-    --hash=sha256:d469b3059dab6b1077def5923ed0a8bf5738bd4a1a87f686d5e2de455354c4ad
+wcwidth==0.3.3 \
+    --hash=sha256:8e9056c446f21c7393514946d143a748c56aad72476844d3f215f7915276508f \
+    --hash=sha256:f8f7d42c8a067d909b80b425342d02c423c5edc546347475e1d402fe3d35bb63
     # via prompt-toolkit
 wrapt==2.0.1 \
     --hash=sha256:0e17283f533a0d24d6e5429a7d11f250a58d28b4ae5186f8f47853e3e70d2590 \

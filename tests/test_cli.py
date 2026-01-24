@@ -251,3 +251,15 @@ class TestClearCommands:
 
             assert result.exit_code == 0
             assert "does not exist" in result.output
+
+
+class TestMainCommand:
+    """Tests for main command."""
+
+    def test_main_command(self) -> None:
+        """Should execute main command."""
+        result = runner.invoke(app, ["main"])
+        assert result.exit_code == 0
+        output = strip_ansi(result.output)
+        # Should print the message from main()
+        assert "Replace this message" in output or "Typer" in output
