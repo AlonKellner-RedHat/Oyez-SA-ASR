@@ -4,6 +4,7 @@
 import gc
 import logging
 import multiprocessing as mp
+import random
 from collections import defaultdict
 from concurrent.futures import BrokenExecutor, ProcessPoolExecutor, as_completed
 from pathlib import Path
@@ -190,6 +191,17 @@ def process_by_recording(
     data_dir.mkdir(parents=True, exist_ok=True)
 
     work_items, skipped_count = _build_work_items(utterances, audio_paths)
+    # Deterministic shuffle: same recordings = same order
+    # Edited by Claude: Use hash of sorted keys for reproducible randomization
+    if work_items:
+        # Create deterministic seed from sorted recording keys
+        sorted_keys = sorted(item[0] for item in work_items)
+        seed = hash(tuple(sorted_keys)) % (2**31)  # Limit to 32-bit signed int
+        random.seed(seed)
+        shuffled = work_items.copy()
+        random.shuffle(shuffled)
+        work_items = shuffled
+
     writer = _ShardWriter(data_dir, shard_size_mb * 1024 * 1024, pa, pq)
 
     embedded_count = 0
@@ -237,6 +249,9 @@ def process_by_recording(
     finally:
         if executor is not None:
             executor.shutdown(wait=False, cancel_futures=True)
+        # Explicit cleanup of orphan workers (including resource_tracker)
+        # Edited by Claude: Ensure cleanup even after OOM kills
+        kill_orphan_workers()
         check_oom(initial_oom, last_path)
 
     return {

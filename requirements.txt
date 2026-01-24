@@ -1682,9 +1682,9 @@ urllib3==2.6.3 \
     # via
     #   botocore
     #   requests
-wcwidth==0.3.0 \
-    --hash=sha256:073a1acb250e4add96cfd5ef84e0036605cd6e0d0782c8c15c80e42202348458 \
-    --hash=sha256:af1a2fb0b83ef4a7fc0682a4c95ca2576e14d0280bca2a9e67b7dc9f2733e123
+wcwidth==0.3.2 \
+    --hash=sha256:817abc6a89e47242a349b5d100cbd244301690d6d8d2ec6335f26fe6640a6315 \
+    --hash=sha256:d469b3059dab6b1077def5923ed0a8bf5738bd4a1a87f686d5e2de455354c4ad
     # via prompt-toolkit
 wrapt==2.0.1 \
     --hash=sha256:0e17283f533a0d24d6e5429a7d11f250a58d28b4ae5186f8f47853e3e70d2590 \
