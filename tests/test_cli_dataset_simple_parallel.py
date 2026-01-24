@@ -196,7 +196,11 @@ class TestParallelProcessing:
             )
             assert len(output_parquet) >= 1
 
-            table = pq.read_table(output_parquet[0])
-            rows = table.to_pylist()
+            # Workers write independently, so data may be split across multiple files
+            # Read and combine all parquet files
+            all_rows = []
+            for parquet_file in output_parquet:
+                table = pq.read_table(parquet_file)
+                all_rows.extend(table.to_pylist())
             # 3 recordings x 2 utterances each = 6 total
-            assert len(rows) == 6
+            assert len(all_rows) == 6

@@ -67,6 +67,26 @@ def get_memory_usage_mb() -> tuple[int, int, int]:
     return 0, 0, 0
 
 
+def get_swap_usage_mb() -> tuple[int, int]:
+    """Get swap usage (used_mb, total_mb). Edited by Claude."""
+    try:
+        result = subprocess.run(
+            ["/usr/bin/free", "-m"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        for line in result.stdout.splitlines():
+            if line.startswith("Swap:"):
+                parts = line.split()
+                total = int(parts[1])
+                used = int(parts[2])
+                return used, total
+    except (subprocess.SubprocessError, ValueError, IndexError, FileNotFoundError):
+        pass
+    return 0, 0
+
+
 def kill_orphan_workers() -> int:
     """Kill orphaned multiprocessing workers from previous runs.
 
