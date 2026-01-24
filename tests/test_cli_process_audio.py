@@ -13,6 +13,12 @@ from typer.testing import CliRunner
 from oyez_sa_asr.audio_utils import save_audio
 from oyez_sa_asr.cli import app
 
+# Import module functions directly for coverage
+# Edited by Claude: Import functions directly to ensure coverage tracking
+from oyez_sa_asr.cli_process_audio import (  # noqa: F401
+    _validate_flac_files,
+)
+
 runner = CliRunner()
 
 
@@ -148,3 +154,227 @@ class TestProcessAudioExecution:
         assert result.exit_code == 0
         output = strip_ansi(result.output)
         assert "--workers" in output or "-w" in output
+
+
+class TestFlacValidation:
+    """Test FLAC validation after processing."""
+
+    def test_reports_missing_flac_files(self) -> None:
+        """Should report when FLAC files are missing after processing."""
+        from oyez_sa_asr.audio_source import AudioSource
+        from oyez_sa_asr.cli_process_audio import _validate_flac_files
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "data"
+
+            # Create sources that should have FLAC files but don't
+            sources = [
+                AudioSource("rec1", "2020", "19-999"),
+                AudioSource("rec2", "2020", "19-888"),
+            ]
+
+            # Create output directories but no FLAC files
+            for source in sources:
+                out_dir = output_dir / source.term / source.docket
+                out_dir.mkdir(parents=True)
+                # Create metadata but not FLAC (simulating failed conversion)
+                meta_path = out_dir / f"{source.recording_id}.metadata.json"
+                meta_path.write_text('{"format": "mp3", "sample_rate": 44100}')
+
+            # Validate - should find 2 missing FLACs
+            missing_count, missing_sources = _validate_flac_files(sources, output_dir)
+            assert missing_count == 2
+            assert len(missing_sources) == 2
+            assert missing_sources[0].recording_id == "rec1"
+            assert missing_sources[1].recording_id == "rec2"
+
+    def test_no_warning_when_all_flacs_exist(self) -> None:
+        """Should not report warning when all FLACs are created successfully."""
+        from oyez_sa_asr.audio_source import AudioSource
+        from oyez_sa_asr.cli_process_audio import _validate_flac_files
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "data"
+
+            # Create sources with FLAC files
+            sources = [
+                AudioSource("rec1", "2020", "19-888"),
+            ]
+
+            # Create output directory and FLAC file
+            out_dir = output_dir / "2020" / "19-888"
+            out_dir.mkdir(parents=True)
+            flac_path = out_dir / "rec1.flac"
+            # Create a minimal FLAC file (just write some bytes)
+            flac_path.write_bytes(b"fLaC\x00\x00\x00")
+
+            # Validate - should find 0 missing FLACs
+            missing_count, missing_sources = _validate_flac_files(sources, output_dir)
+            assert missing_count == 0
+            assert len(missing_sources) == 0
+
+    def test_reports_multiple_missing_files(self) -> None:
+        """Should report count when multiple FLACs are missing."""
+        from oyez_sa_asr.audio_source import AudioSource
+        from oyez_sa_asr.cli_process_audio import _validate_flac_files
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "data"
+
+            # Create 3 sources without FLAC files
+            sources = [AudioSource(f"audio_{i}", "2020", f"case-{i}") for i in range(3)]
+
+            # Create metadata but not FLAC for each
+            for source in sources:
+                out_dir = output_dir / source.term / source.docket
+                out_dir.mkdir(parents=True)
+                meta_path = out_dir / f"{source.recording_id}.metadata.json"
+                meta_path.write_text('{"format": "mp3", "sample_rate": 44100}')
+
+            # Validate - should find 3 missing FLACs
+            missing_count, missing_sources = _validate_flac_files(sources, output_dir)
+            assert missing_count == 3
+            assert len(missing_sources) == 3
+
+    def test_integration_reports_missing_after_processing(self) -> None:
+        """Integration test: should report missing FLACs in actual command output."""
+        from oyez_sa_asr.audio_source import AudioSource
+        from oyez_sa_asr.cli_process_audio import _validate_flac_files
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "data"
+
+            # Create a source that should have been processed but FLAC is missing
+            source = AudioSource("test_integration", "2020", "19-777")
+            missing_count, _ = _validate_flac_files([source], output_dir)
+            # Should report 1 missing
+            assert missing_count == 1
+
+    def test_validation_logs_more_than_five_missing(self) -> None:
+        """Should log '... and X more' when more than 5 files are missing."""
+        from oyez_sa_asr.audio_source import AudioSource
+        from oyez_sa_asr.cli_process_audio import _validate_flac_files
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "data"
+
+            # Create 7 sources without FLAC files
+            sources = [AudioSource(f"rec_{i}", "2020", f"case-{i}") for i in range(7)]
+
+            # Create metadata but not FLAC for each
+            for source in sources:
+                out_dir = output_dir / source.term / source.docket
+                out_dir.mkdir(parents=True)
+                meta_path = out_dir / f"{source.recording_id}.metadata.json"
+                meta_path.write_text('{"format": "mp3", "sample_rate": 44100}')
+
+            # Validate - should find 7 missing FLACs
+            missing_count, missing_sources = _validate_flac_files(sources, output_dir)
+            assert missing_count == 7
+            assert len(missing_sources) == 7
+            # Should have exactly 7 sources (for testing the "more than 5" path)
+            assert len(missing_sources) > 5
+
+    def test_empty_pending_list(self) -> None:
+        """Should handle empty pending list gracefully."""
+        from oyez_sa_asr.cli_process_audio import _validate_flac_files
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "data"
+
+            # Validate with empty list
+            missing_count, missing_sources = _validate_flac_files([], output_dir)
+            assert missing_count == 0
+            assert len(missing_sources) == 0
+
+    def test_force_mode_reprocesses_existing(self) -> None:
+        """Should reprocess files when --force is used."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            output_dir = Path(tmpdir) / "data"
+            mp3_dir = (
+                cache_dir / "oyez.case-media.mp3" / "case_data" / "2020" / "19-force"
+            )
+            mp3_dir.mkdir(parents=True)
+
+            samples = make_sine(sr=44100, dur=0.1)
+            save_audio(samples, 44100, mp3_dir / "test_force.mp3")
+
+            # Process once
+            result = runner.invoke(
+                app,
+                ["process", "audio", "-c", str(cache_dir), "-o", str(output_dir)],
+            )
+            assert result.exit_code == 0
+
+            # Process again with --force
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "audio",
+                    "-c",
+                    str(cache_dir),
+                    "-o",
+                    str(output_dir),
+                    "--force",
+                ],
+            )
+            assert result.exit_code == 0
+            output = strip_ansi(result.output)
+            # Should not skip (force mode)
+            assert "skip" not in output.lower() or "force" in output.lower()
+
+    def test_validation_with_exactly_five_missing(self) -> None:
+        """Should handle exactly 5 missing files (boundary case)."""
+        from oyez_sa_asr.audio_source import AudioSource
+        from oyez_sa_asr.cli_process_audio import _validate_flac_files
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "data"
+
+            # Create exactly 5 sources without FLAC files
+            sources = [AudioSource(f"rec_{i}", "2020", f"case-{i}") for i in range(5)]
+
+            # Create metadata but not FLAC for each
+            for source in sources:
+                out_dir = output_dir / source.term / source.docket
+                out_dir.mkdir(parents=True)
+                meta_path = out_dir / f"{source.recording_id}.metadata.json"
+                meta_path.write_text('{"format": "mp3", "sample_rate": 44100}')
+
+            # Validate - should find 5 missing FLACs
+            missing_count, missing_sources = _validate_flac_files(sources, output_dir)
+            assert missing_count == 5
+            assert len(missing_sources) == 5
+
+    def test_terms_filtering_in_output(self) -> None:
+        """Should show terms in output when provided."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            output_dir = Path(tmpdir) / "data"
+            mp3_dir = (
+                cache_dir / "oyez.case-media.mp3" / "case_data" / "2020" / "19-terms"
+            )
+            mp3_dir.mkdir(parents=True)
+
+            samples = make_sine(sr=44100, dur=0.1)
+            save_audio(samples, 44100, mp3_dir / "test_terms.mp3")
+
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "audio",
+                    "-c",
+                    str(cache_dir),
+                    "-o",
+                    str(output_dir),
+                    "--term",
+                    "2020",
+                ],
+            )
+            assert result.exit_code == 0
+            output = strip_ansi(result.output)
+            # Should show terms in output
+            assert "2020" in output

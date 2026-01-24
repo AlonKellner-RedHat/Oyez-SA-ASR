@@ -51,6 +51,26 @@ def _count_anomalies(output_dir: Path) -> int:
     return count
 
 
+def _validate_flac_files(
+    pending: list[AudioSource], output_dir: Path
+) -> tuple[int, list[AudioSource]]:
+    """Validate that all pending sources have FLAC files after processing.
+
+    Returns (missing_count, missing_sources).
+    Edited by Claude.
+    """
+    missing_count = 0
+    missing_sources = []
+    for source in pending:
+        flac_path = (
+            output_dir / source.term / source.docket / f"{source.recording_id}.flac"
+        )
+        if not flac_path.exists():
+            missing_count += 1
+            missing_sources.append(source)
+    return missing_count, missing_sources
+
+
 def _try_process_file(
     audio_path: Path,
     recording_id: str,
@@ -133,14 +153,25 @@ def _filter_pending_sources(
     *,
     force: bool = False,
 ) -> tuple[list[AudioSource], int]:
-    """Filter out already processed recordings (unless force=True)."""
+    """Filter out already processed recordings (unless force=True).
+
+    Edited by Claude: Also check for orphaned metadata files without FLACs.
+    """
     if force:
         return list(sources.values()), 0
     pending, skipped = [], 0
     for (term, docket, rec_id), source in sources.items():
-        if (output_dir / term / docket / f"{rec_id}.flac").exists():
+        flac_path = output_dir / term / docket / f"{rec_id}.flac"
+        meta_path = output_dir / term / docket / f"{rec_id}.metadata.json"
+
+        # Check if FLAC exists (required)
+        if flac_path.exists():
             skipped += 1
         else:
+            # If metadata exists but FLAC doesn't, clean up orphaned metadata
+            # Edited by Claude: Remove orphaned metadata to allow reprocessing
+            if meta_path.exists():
+                meta_path.unlink()
             pending.append(source)
     return pending, skipped
 
@@ -266,6 +297,21 @@ def add_audio_command(app: typer.Typer) -> None:
         console.print(f"[bold green]Done![/bold green] Processed {processed} files.")
         if errors > 0:
             console.print(f"[yellow]Errors:[/yellow] {errors} files failed")
+
+        # Validate FLAC files were actually created
+        # Edited by Claude: Check for missing FLACs after processing
+        missing_count, missing_sources = _validate_flac_files(pending, output_dir)
+        if missing_count > 0:
+            console.print(
+                f"[yellow]Warning:[/yellow] {missing_count} files were not converted to FLAC successfully"
+            )
+            # Log first few missing files for debugging
+            for source in missing_sources[:5]:
+                console.print(
+                    f"  Missing: {source.term}/{source.docket}/{source.recording_id}"
+                )
+            if len(missing_sources) > 5:
+                console.print(f"  ... and {len(missing_sources) - 5} more")
 
         # Report anomaly statistics
         anomaly_count = _count_anomalies(output_dir)

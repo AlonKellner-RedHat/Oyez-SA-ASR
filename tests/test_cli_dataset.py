@@ -171,6 +171,8 @@ class TestCollectFunctions:
                 "source_era": "digital",
             }
             (term_dir / "rec.metadata.json").write_text(json.dumps(meta))
+            # Create FLAC file (required for collect_recordings to include it)
+            (term_dir / "rec.flac").write_bytes(b"fLaC\x00\x00\x00")
 
             result = _collect_recordings(audio_dir, None)
             assert len(result) == 1

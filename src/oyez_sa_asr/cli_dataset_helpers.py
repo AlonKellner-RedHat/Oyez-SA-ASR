@@ -199,6 +199,11 @@ def collect_recordings(
                     flac_path = docket_dir / flac_name
                     recording_id = meta_file.stem.replace(".metadata", "")
 
+                    # Only include recordings where FLAC file actually exists
+                    # Edited by Claude: Validate FLAC exists to prevent skipped utterances
+                    if not flac_path.exists():
+                        continue
+
                     # Edited by Claude: Add transcript_type from recording_id
                     transcript_type = parse_transcript_type_from_recording_id(
                         recording_id
