@@ -37,6 +37,39 @@ DEFAULT_FLEX_DIR = _PROJECT_ROOT / "datasets" / "flex"
 DEFAULT_SIMPLE_DIR = _PROJECT_ROOT / "datasets" / "simple"
 
 
+# Edited by Claude: Export features schema for v4.x compatibility (no trust_remote_code)
+def _get_simple_features() -> Any:
+    """Get Features schema for simple dataset.
+
+    Exported as SIMPLE_FEATURES constant for use with generic load_dataset in v4.x.
+    """
+    from datasets import Audio, Features, Value  # noqa: PLC0415
+
+    return Features(
+        {
+            "id": Value("string"),
+            "audio": Audio(sampling_rate=None, decode=False),
+            "sentence": Value("string"),
+            "speaker": Value("string"),
+            "speaker_id": Value("int64"),
+            "is_justice": Value("bool"),
+            "duration": Value("float64"),
+            "term": Value("string"),
+            "docket": Value("string"),
+            "recording_type": Value("string"),
+            "start_sec": Value("float64"),
+            "end_sec": Value("float64"),
+        }
+    )
+
+
+# Export as constant for easy import
+try:
+    SIMPLE_FEATURES = _get_simple_features()
+except ImportError:
+    SIMPLE_FEATURES = None  # type: ignore[assignment]
+
+
 def load_simple_hf(
     split: str = "lt1m",
     data_dir: Path | None = None,
@@ -46,7 +79,8 @@ def load_simple_hf(
     """Load simple dataset as HuggingFace Dataset with audio decoding.
 
     This is the recommended way to load the dataset - audio is automatically
-    decoded into numpy arrays.
+    decoded into numpy arrays. The schema is automatically applied, so users
+    don't need to specify features manually.
 
     Args:
         split: One of 'lt1m', 'lt5m', 'lt30m'
@@ -71,6 +105,7 @@ def load_simple_hf(
         for sample in ds:
             print(sample["sentence"])
     """
+    # Edited by Claude: Include explicit Features schema to avoid CastError
     from datasets import load_dataset  # noqa: PLC0415  # pragma: no cover
 
     base = data_dir or DEFAULT_SIMPLE_DIR  # pragma: no cover
@@ -79,9 +114,16 @@ def load_simple_hf(
         msg = f"Dataset not found at {split_dir}. Run 'oyez dataset simple' first."
         raise FileNotFoundError(msg)
 
+    # Use exported features schema
+    features = _get_simple_features()  # pragma: no cover
+
     parquet_pattern = str(split_dir / "*.parquet")  # pragma: no cover
     return load_dataset(
-        "parquet", data_files=parquet_pattern, split="train", streaming=streaming
+        "parquet",
+        data_files=parquet_pattern,
+        split="train",
+        streaming=streaming,
+        features=features,
     )  # pragma: no cover
 
 
