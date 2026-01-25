@@ -327,7 +327,10 @@ def pipeline_run(
     # Show delegated options if any
     if delegated_opts:
         console.print("\n[dim]Delegated options:[/dim]")
-        for (phase, command), opts in sorted(delegated_opts.items()):
+        # Edited by Claude: Fix sorting with None values - use empty string for None
+        for (phase, command), opts in sorted(
+            delegated_opts.items(), key=lambda x: (x[0][0], x[0][1] or "")
+        ):
             cmd_desc = f"{phase}-{command}" if command else phase
             opt_str = ", ".join(f"{k}={v}" for k, v in opts.items())
             console.print(f"  [dim]{cmd_desc}:[/dim] {opt_str}")

@@ -41,6 +41,12 @@ def scrape_index(
         int,
         typer.Option("--ttl-days", "-t", help="Cache TTL in days"),
     ] = 30,
+    _terms: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--term", "-T", help="Filter to specific term(s) (ignored for index)"
+        ),
+    ] = None,
     force: Annotated[
         bool,
         typer.Option("--force", "-F", help="Bypass cache and re-fetch all"),

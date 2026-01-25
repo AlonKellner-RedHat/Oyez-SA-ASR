@@ -63,6 +63,12 @@ def _make_clear_with_data(name: str, default_cache: Path, default_data: Path) ->
             Path,
             typer.Option("--data-dir", "-d", help="Data directory to clear"),
         ] = default_data,
+        _terms: Annotated[
+            list[str] | None,
+            typer.Option(
+                "--term", "-T", help="Filter to specific term(s) (ignored for clear)"
+            ),
+        ] = None,
         force: Annotated[
             bool,
             typer.Option("--force", "-f", help="Skip confirmation prompt"),
@@ -98,6 +104,12 @@ def _make_clear_cache_only(name: str, default_cache: Path) -> None:
             Path,
             typer.Option("--cache-dir", "-c", help="Cache directory to clear"),
         ] = default_cache,
+        _terms: Annotated[
+            list[str] | None,
+            typer.Option(
+                "--term", "-T", help="Filter to specific term(s) (ignored for clear)"
+            ),
+        ] = None,
         force: Annotated[
             bool,
             typer.Option("--force", "-f", help="Skip confirmation prompt"),
@@ -138,6 +150,12 @@ def _make_clear_data_only(name: str, default_data: Path) -> None:
             Path,
             typer.Option("--data-dir", "-d", help="Data directory to clear"),
         ] = default_data,
+        _terms: Annotated[
+            list[str] | None,
+            typer.Option(
+                "--term", "-T", help="Filter to specific term(s) (ignored for clear)"
+            ),
+        ] = None,
         force: Annotated[
             bool,
             typer.Option("--force", "-f", help="Skip confirmation prompt"),

@@ -63,6 +63,12 @@ def publish_raw(
         str,
         typer.Option("--repo-id", "-r", help="HuggingFace repo ID"),
     ] = "oyez-sa-asr-raw",
+    _terms: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--term", "-T", help="Filter to specific term(s) (ignored for publish)"
+        ),
+    ] = None,
     private: Annotated[
         bool,
         typer.Option("--private", "-p", help="Make repository private"),
@@ -91,6 +97,12 @@ def publish_flex(
         str,
         typer.Option("--repo-id", "-r", help="HuggingFace repo ID"),
     ] = "oyez-sa-asr-flex",
+    _terms: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--term", "-T", help="Filter to specific term(s) (ignored for publish)"
+        ),
+    ] = None,
     private: Annotated[
         bool,
         typer.Option("--private", "-p", help="Make repository private"),
@@ -119,6 +131,12 @@ def publish_simple(
         str,
         typer.Option("--repo-id", "-r", help="HuggingFace repo ID"),
     ] = "oyez-sa-asr-simple",
+    _terms: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--term", "-T", help="Filter to specific term(s) (ignored for publish)"
+        ),
+    ] = None,
     private: Annotated[
         bool,
         typer.Option("--private", "-p", help="Make repository private"),

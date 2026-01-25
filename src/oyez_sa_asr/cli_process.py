@@ -48,6 +48,12 @@ def process_index(
         Path,
         typer.Option("--output", "-o", help="Output JSON file path"),
     ] = Path("data/index/cases_index.json"),
+    _terms: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--term", "-T", help="Filter to specific term(s) (ignored for index)"
+        ),
+    ] = None,
     force: Annotated[
         bool,
         typer.Option("--force", "-F", help="Regenerate index even if output exists"),
