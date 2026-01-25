@@ -8,7 +8,9 @@ from pathlib import Path
 from typing import Any
 
 # Current schema version - increment when index structure changes
-SCHEMA_VERSION = 1
+# Version 2: Added recording_type, speaker metadata (is_justice, justice_speakers, etc.)
+# Edited by Claude: Incremented for new metadata fields
+SCHEMA_VERSION = 2
 
 
 @dataclass

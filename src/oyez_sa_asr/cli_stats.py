@@ -1,6 +1,7 @@
 # Edited by Claude
 """Stats commands for displaying aggregate statistics."""
 
+import contextlib
 from collections import Counter
 from pathlib import Path
 from typing import Annotated
@@ -62,7 +63,14 @@ def stats_audio(
         console.print("[yellow]No recordings found.[/yellow]")
         return
 
-    total_duration = sum(float(r.get("duration_sec") or 0) for r in recordings)
+    total_duration = 0.0
+    for r in recordings:
+        duration_val = r.get("duration_sec")
+        if isinstance(duration_val, (int, float)):
+            total_duration += float(duration_val)
+        elif isinstance(duration_val, str):
+            with contextlib.suppress(ValueError, TypeError):
+                total_duration += float(duration_val)
     total_size = 0
 
     for r in recordings:

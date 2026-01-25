@@ -131,18 +131,27 @@ def process_speakers(
         list[str] | None,
         typer.Option("--term", "-T", help="Filter to specific term(s)"),
     ] = None,
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force", "-F", help="Regenerate speaker files even if they exist"
+        ),
+    ] = False,
 ) -> None:
     """Aggregate speaker data from transcripts into per-speaker JSON files.
 
     Creates one JSON file per speaker at data/speakers/{id}_{name_slug}.json
     with recordings, turn counts, durations, and other statistics.
     """
+    # Edited by Claude: Add force support
     console.print("[bold]Processing speakers from transcripts[/bold]")
     console.print(f"  Transcripts dir: {transcripts_dir}")
     console.print(f"  Cases dir: {cases_dir}")
     console.print(f"  Output dir: {output_dir}")
     if terms:
         console.print(f"  Terms: {', '.join(terms)}")
+    if force:
+        console.print("  [yellow]Force mode: regenerating speaker files[/yellow]")
     console.print()
 
     if not transcripts_dir.exists():
@@ -189,13 +198,36 @@ def process_speakers(
     # Save speaker profiles
     output_dir.mkdir(parents=True, exist_ok=True)
     saved_count = 0
+    skipped_existing = 0
 
     for profile in tqdm(speakers.values(), desc="Saving", unit="speaker"):
+        # Finalize to determine role and output path
+        profile.finalize(output_dir)
+        subdir = output_dir / profile.get_subdir()
+        output_path = subdir / profile.get_filename()
+
+        # Check if file exists (check both justices and other directories)
+        if not force:
+            # Check in the determined subdirectory
+            if output_path.exists():
+                skipped_existing += 1
+                continue
+            # Also check in the other subdirectory in case role changed
+            other_subdir = output_dir / (
+                "other" if profile.get_subdir() == "justices" else "justices"
+            )
+            other_path = other_subdir / profile.get_filename()
+            if other_path.exists():
+                skipped_existing += 1
+                continue
+
         profile.save(output_dir)
         saved_count += 1
 
     console.print()
     console.print(f"[bold green]Done![/bold green] Saved {saved_count} speaker files.")
+    if skipped_existing > 0:
+        console.print(f"  Skipped (existing): {skipped_existing}")
     console.print(f"Output: {output_dir}")
 
 

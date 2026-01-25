@@ -16,6 +16,40 @@ from .term_filter import filter_dirs
 console = Console(force_terminal=True)
 
 
+def load_justice_speaker_ids(speakers_dir: Path | None = None) -> set[int]:
+    """Load set of justice speaker IDs from speaker files.
+
+    Edited by Claude: Helper to identify justice speakers for metadata.
+
+    Args:
+        speakers_dir: Directory containing speakers/justices/ subdirectory.
+                     Defaults to data/speakers if None.
+
+    Returns
+    -------
+        Set of speaker IDs who are justices.
+    """
+    if speakers_dir is None:
+        speakers_dir = Path("data/speakers")
+
+    justices_dir = speakers_dir / "justices"
+    if not justices_dir.exists():
+        return set()
+
+    justice_ids: set[int] = set()
+    for speaker_file in justices_dir.glob("*.json"):
+        try:
+            with speaker_file.open() as f:
+                data = json.load(f)
+            speaker_id = data.get("id")
+            if speaker_id is not None:
+                justice_ids.add(speaker_id)
+        except (json.JSONDecodeError, KeyError):
+            continue
+
+    return justice_ids
+
+
 def require_pyarrow() -> tuple[Any, Any]:
     """Import and return pyarrow modules, or exit if not installed."""
     try:
@@ -171,14 +205,66 @@ def collect_raw_recordings(
 
 
 def collect_recordings(
-    audio_dir: Path, terms: list[str] | None
-) -> list[dict[str, str | float | int | None]]:
-    """Collect recording metadata from processed audio (flex dataset)."""
-    records: list[dict[str, str | float | int | None]] = []
+    audio_dir: Path,
+    terms: list[str] | None,
+    transcripts_dir: Path | None = None,
+    speakers_dir: Path | None = None,
+) -> list[dict[str, str | float | int | None | list[int]]]:
+    """Collect recording metadata from processed audio (flex dataset).
+
+    Edited by Claude: Added speaker metadata (justice_speakers, other_speakers, total_speakers).
+
+    Args:
+        audio_dir: Directory with processed audio files.
+        terms: Optional list of terms to filter.
+        transcripts_dir: Optional directory with transcript files for speaker metadata.
+        speakers_dir: Optional directory with speaker files for justice detection.
+    """
+    records: list[dict[str, str | float | int | None | list[int]]] = []
     term_set = set(terms) if terms else None
 
     if not audio_dir.exists():
         return records
+
+    # Load justice speaker IDs for classification
+    justice_ids = load_justice_speaker_ids(speakers_dir) if speakers_dir else set()
+
+    # Build transcript lookup: (term, docket, transcript_type) -> list of speaker IDs
+    transcript_speakers: dict[tuple[str, str, str], list[int]] = {}
+    if transcripts_dir and transcripts_dir.exists():
+        for term_dir in transcripts_dir.iterdir():
+            if not term_dir.is_dir():
+                continue
+            if term_set and term_dir.name not in term_set:
+                continue
+
+            for docket_dir in term_dir.iterdir():
+                if not docket_dir.is_dir():
+                    continue
+
+                for transcript_file in docket_dir.glob("*.json"):
+                    try:
+                        with transcript_file.open() as f:
+                            data = json.load(f)
+
+                        term = data.get("term", term_dir.name)
+                        docket = data.get("case_docket", docket_dir.name)
+                        transcript_type = data.get("type", "unknown")
+                        key = (term, docket, transcript_type)
+
+                        # Extract unique speaker IDs from transcript
+                        speaker_ids: set[int] = set()
+                        for turn in data.get("turns", []):
+                            if (
+                                turn.get("is_valid")
+                                and turn.get("speaker_id") is not None
+                            ):
+                                speaker_ids.add(turn["speaker_id"])
+
+                        if speaker_ids:
+                            transcript_speakers[key] = list(speaker_ids)
+                    except (json.JSONDecodeError, KeyError):
+                        continue
 
     for term_dir in audio_dir.iterdir():
         if not term_dir.is_dir():
@@ -209,6 +295,17 @@ def collect_recordings(
                         recording_id
                     )
 
+                    # Get speaker metadata for this recording
+                    key = (term_dir.name, docket_dir.name, transcript_type)
+                    recording_speaker_ids = transcript_speakers.get(key, [])
+                    justice_speakers = [
+                        sid for sid in recording_speaker_ids if sid in justice_ids
+                    ]
+                    other_speakers = [
+                        sid for sid in recording_speaker_ids if sid not in justice_ids
+                    ]
+                    total_speakers = len(recording_speaker_ids)
+
                     records.append(
                         {
                             "term": term_dir.name,
@@ -221,6 +318,9 @@ def collect_recordings(
                             "channels": meta.get("channels"),
                             "source_format": meta.get("source_format"),
                             "source_era": meta.get("source_era"),
+                            "justice_speakers": justice_speakers,
+                            "other_speakers": other_speakers,
+                            "total_speakers": total_speakers,
                         }
                     )
                 except (json.JSONDecodeError, KeyError):
@@ -230,11 +330,22 @@ def collect_recordings(
 
 
 def collect_utterances(
-    transcripts_dir: Path, terms: list[str] | None
-) -> list[dict[str, str | float | int | None]]:
-    """Collect utterances from processed transcripts."""
-    utterances: list[dict[str, str | float | int | None]] = []
+    transcripts_dir: Path, terms: list[str] | None, speakers_dir: Path | None = None
+) -> list[dict[str, str | float | int | None | bool]]:
+    """Collect utterances from processed transcripts.
+
+    Edited by Claude: Added is_justice field based on speaker files.
+
+    Args:
+        transcripts_dir: Directory with processed transcripts.
+        terms: Optional list of terms to filter.
+        speakers_dir: Optional directory with speaker files for justice detection.
+    """
+    utterances: list[dict[str, str | float | int | None | bool]] = []
     term_set = set(terms) if terms else None
+
+    # Load justice speaker IDs
+    justice_ids = load_justice_speaker_ids(speakers_dir)
 
     if not transcripts_dir.exists():
         return utterances
@@ -259,6 +370,11 @@ def collect_utterances(
                     transcript_type = data.get("type", "")
 
                     for turn in data.get("turns", []):
+                        speaker_id = turn.get("speaker_id")
+                        is_justice = (
+                            speaker_id is not None and speaker_id in justice_ids
+                        )
+
                         utterances.append(
                             {
                                 "term": term,
@@ -268,8 +384,9 @@ def collect_utterances(
                                 "start_sec": turn.get("start"),
                                 "end_sec": turn.get("stop"),
                                 "duration_sec": turn.get("duration"),
-                                "speaker_id": turn.get("speaker_id"),
+                                "speaker_id": speaker_id,
                                 "speaker_name": turn.get("speaker_name"),
+                                "is_justice": is_justice,
                                 "text": turn.get("text"),
                                 "word_count": turn.get("word_count"),
                                 "valid": turn.get("is_valid", False),
@@ -280,3 +397,112 @@ def collect_utterances(
                     continue
 
     return utterances
+
+
+def collect_speakers(
+    speakers_dir: Path, terms: list[str] | None
+) -> list[dict[str, Any]]:
+    """Collect speaker statistics from speaker JSON files.
+
+    Edited by Claude: Aggregates speaker data for speakers mode.
+
+    Args:
+        speakers_dir: Directory containing speakers/justices/ and speakers/other/ subdirectories.
+        terms: Optional list of terms to filter.
+
+    Returns
+    -------
+        List of speaker dictionaries with aggregated statistics.
+    """
+    speakers: list[dict[str, Any]] = []
+    term_set = set(terms) if terms else None
+
+    if not speakers_dir.exists():
+        return speakers
+
+    # Load from both justices and other directories
+    for subdir_name in ("justices", "other"):
+        subdir = speakers_dir / subdir_name
+        if not subdir.exists():
+            continue
+
+        for speaker_file in subdir.glob("*.json"):
+            try:
+                with speaker_file.open() as f:
+                    data = json.load(f)
+
+                # Filter by terms if specified
+                if term_set:
+                    by_term = data.get("by_term", {})
+                    matching_terms = set(by_term.keys()) & term_set
+                    if not matching_terms:
+                        continue
+                    # Recalculate totals for matching terms
+                    totals = data.get("totals", {})
+                    filtered_recordings = sum(
+                        by_term.get(term, {}).get("recordings", 0)
+                        for term in matching_terms
+                    )
+                    filtered_turns = sum(
+                        by_term.get(term, {}).get("turns", 0) for term in matching_terms
+                    )
+                    filtered_duration = sum(
+                        by_term.get(term, {}).get("duration_seconds", 0.0)
+                        for term in matching_terms
+                    )
+                    filtered_words = sum(
+                        by_term.get(term, {}).get("word_count", 0)
+                        for term in matching_terms
+                    )
+                    filtered_cases = len(
+                        {
+                            case
+                            for case in data.get("cases", [])
+                            if any(
+                                case.startswith(f"{term}/") for term in matching_terms
+                            )
+                        }
+                    )
+
+                    speaker_data = {
+                        "speaker_id": data.get("id"),
+                        "name": data.get("name"),
+                        "role": data.get("role", "other"),
+                        "total_recordings": filtered_recordings,
+                        "total_cases": filtered_cases,
+                        "total_turns": filtered_turns,
+                        "total_duration_sec": round(filtered_duration, 2),
+                        "total_word_count": filtered_words,
+                        "first_appearance": min(
+                            (term for term in matching_terms if term in by_term),
+                            default=None,
+                        ),
+                        "last_appearance": max(
+                            (term for term in matching_terms if term in by_term),
+                            default=None,
+                        ),
+                        "by_term": {
+                            k: v for k, v in by_term.items() if k in matching_terms
+                        },
+                    }
+                else:
+                    totals = data.get("totals", {})
+                    speaker_data = {
+                        "speaker_id": data.get("id"),
+                        "name": data.get("name"),
+                        "role": data.get("role", "other"),
+                        "total_recordings": totals.get("recordings", 0),
+                        "total_cases": totals.get("cases", 0),
+                        "total_turns": totals.get("turns", 0),
+                        "total_duration_sec": totals.get("duration_seconds", 0.0),
+                        "total_word_count": totals.get("word_count", 0),
+                        "first_appearance": data.get("first_appearance"),
+                        "last_appearance": data.get("last_appearance"),
+                        "by_term": data.get("by_term", {}),
+                    }
+
+                speakers.append(speaker_data)
+            except (json.JSONDecodeError, KeyError):
+                continue
+
+    return speakers

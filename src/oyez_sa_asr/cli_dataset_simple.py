@@ -11,6 +11,7 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
+from .cli_dataset_helpers import collect_speakers, require_pyarrow
 from .cli_dataset_simple_core import run_simple_dataset
 from .cli_dataset_simple_flavors import (
     dataset_simple_lt1m,
@@ -116,3 +117,24 @@ def dataset_simple(
 
     console.print("\n[bold green]All splits complete![/bold green]")
     console.print(f"Output directories: {output_dir}/lt1m, lt5m, lt30m")
+
+    # Generate speakers parquet (shared across all splits)
+    # Edited by Claude: Add speakers mode to simple dataset
+    speakers_dir = Path("data/speakers")
+    if speakers_dir.exists():
+        console.print("\n[cyan]━━━ Generating speakers.parquet ━━━[/cyan]")
+        pa, pq = require_pyarrow()
+        speakers = collect_speakers(speakers_dir, terms)
+        if speakers:
+            data_dir = output_dir / "data"
+            data_dir.mkdir(parents=True, exist_ok=True)
+            table = pa.Table.from_pylist(speakers)
+            pq.write_table(table, data_dir / "speakers.parquet")
+            console.print(f"  Generated speakers.parquet with {len(speakers)} speakers")
+        else:
+            console.print("  [yellow]No speakers found[/yellow]")
+    else:
+        console.print(
+            "\n[yellow]Note:[/yellow] data/speakers not found. Skipping speakers.parquet generation."
+        )
+        console.print("  Run 'oyez process speakers' first to generate speaker data.")

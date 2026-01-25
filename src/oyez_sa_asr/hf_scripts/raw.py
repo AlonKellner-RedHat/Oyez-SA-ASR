@@ -15,6 +15,8 @@ from typing import Any
 
 import datasets
 
+from ..audio_source import parse_transcript_type_from_recording_id
+
 _DESCRIPTION = """\
 Oyez Supreme Court Oral Arguments - Raw Dataset.
 Original MP3/OGG audio files with JSON transcript and case metadata.
@@ -39,6 +41,7 @@ class OyezRaw(datasets.GeneratorBasedBuilder):
                     "audio": datasets.Audio(),
                     "term": datasets.Value("string"),
                     "docket": datasets.Value("string"),
+                    "recording_type": datasets.Value("string"),
                     "title": datasets.Value("string"),
                     "transcript": datasets.Value("string"),
                     "case_name": datasets.Value("string"),
@@ -48,7 +51,7 @@ class OyezRaw(datasets.GeneratorBasedBuilder):
             license=_LICENSE,
         )
 
-    def _split_generators(  # type: ignore[override]
+    def _split_generators(
         self,
         dl_manager: datasets.DownloadManager  # noqa: ARG002
         | datasets.StreamingDownloadManager,
@@ -61,7 +64,7 @@ class OyezRaw(datasets.GeneratorBasedBuilder):
             )
         ]
 
-    def _generate_examples(  # type: ignore[override]  # noqa: PLR0912
+    def _generate_examples(  # type: ignore[override]
         self,
         **kwargs: Any,  # noqa: ARG002
     ) -> Iterator[tuple[int, dict[str, Any]]]:
@@ -130,6 +133,10 @@ class OyezRaw(datasets.GeneratorBasedBuilder):
             case_data = case_index.get((term, docket), {})
             case_name = case_data.get("name", "")
 
+            # Parse recording type from recording_id
+            # Edited by Claude: Add recording_type field
+            recording_type = parse_transcript_type_from_recording_id(rec_id)
+
             yield (
                 idx,
                 {
@@ -137,6 +144,7 @@ class OyezRaw(datasets.GeneratorBasedBuilder):
                     "audio": str(audio_path),
                     "term": term,
                     "docket": docket,
+                    "recording_type": recording_type,
                     "title": title,
                     "transcript": transcript_json,
                     "case_name": case_name,

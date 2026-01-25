@@ -48,12 +48,23 @@ def process_index(
         Path,
         typer.Option("--output", "-o", help="Output JSON file path"),
     ] = Path("data/index/cases_index.json"),
+    force: Annotated[
+        bool,
+        typer.Option("--force", "-F", help="Regenerate index even if output exists"),
+    ] = False,
 ) -> None:
     """Parse cached case index into a structured JSON file."""
+    # Edited by Claude: Add force support
     console.print("[bold]Parsing cached case index[/bold]")
     console.print(f"  Cache dir: {cache_dir}")
     console.print(f"  Output: {output}")
+    if force:
+        console.print("  [yellow]Force mode: regenerating index[/yellow]")
     console.print()
+
+    # If force and output exists, remove it
+    if force and output.exists():
+        output.unlink()
 
     index = parse_cached_cases(cache_dir)
 
@@ -82,17 +93,24 @@ def process_cases(
         list[str] | None,
         typer.Option("--term", "-T", help="Filter to specific term(s)"),
     ] = None,
+    force: Annotated[
+        bool,
+        typer.Option("--force", "-F", help="Reprocess existing case files"),
+    ] = False,
 ) -> None:
     """Parse cached case details into structured JSON files.
 
     Creates one JSON file per case at data/cases/{term}/{docket}.json
     with audio references ready for scrape transcripts/audio commands.
     """
+    # Edited by Claude: Add force support
     console.print("[bold]Processing cached case details[/bold]")
     console.print(f"  Cache dir: {cache_dir}")
     console.print(f"  Output dir: {output_dir}")
     if terms:
         console.print(f"  Terms: {', '.join(terms)}")
+    if force:
+        console.print("  [yellow]Force mode: reprocessing existing files[/yellow]")
     console.print()
 
     raw_dir = cache_dir / "api.oyez.org" / "raw"
@@ -104,6 +122,7 @@ def process_cases(
 
     processed_count = 0
     skipped_term = 0
+    skipped_existing = 0
     error_count = 0
 
     term_set = set(terms) if terms else None
@@ -130,6 +149,13 @@ def process_cases(
                         continue
 
                 case = ProcessedCase.from_raw(raw_data)
+                # Check if output file exists
+                output_path = output_dir / case.term / f"{case.docket_number}.json"
+
+                if not force and output_path.exists():
+                    skipped_existing += 1
+                    continue
+
                 case.save(output_dir, source_path=raw_file)
                 processed_count += 1
 
@@ -141,6 +167,8 @@ def process_cases(
     console.print(f"[bold green]Done![/bold green] Processed {processed_count} cases.")
     if skipped_term > 0:
         console.print(f"  Skipped (term filter): {skipped_term}")
+    if skipped_existing > 0:
+        console.print(f"  Skipped (existing): {skipped_existing}")
     if error_count > 0:
         console.print(
             f"[yellow]Warnings:[/yellow] {error_count} files skipped due to errors"
@@ -166,18 +194,25 @@ def process_transcripts(
         list[str] | None,
         typer.Option("--term", "-T", help="Filter to specific term(s)"),
     ] = None,
+    force: Annotated[
+        bool,
+        typer.Option("--force", "-F", help="Reprocess existing transcript files"),
+    ] = False,
 ) -> None:
     """Parse cached transcripts into structured JSON files.
 
     Creates transcript files at data/transcripts/{term}/{docket}/{type}.json
     with metadata, per-turn data, and content for audio/utterance processing.
     """
+    # Edited by Claude: Add force support
     console.print("[bold]Processing cached transcripts[/bold]")
     console.print(f"  Cache dir: {cache_dir}")
     console.print(f"  Cases dir: {cases_dir}")
     console.print(f"  Output dir: {output_dir}")
     if terms:
         console.print(f"  Terms: {', '.join(terms)}")
+    if force:
+        console.print("  [yellow]Force mode: reprocessing existing files[/yellow]")
     console.print()
 
     raw_dir = cache_dir / "api.oyez.org" / "raw"
@@ -194,6 +229,7 @@ def process_transcripts(
 
     processed_count = 0
     skipped_no_case = 0
+    skipped_existing = 0
     error_count = 0
 
     raw_files = list(raw_dir.glob("*.json"))
@@ -221,6 +257,18 @@ def process_transcripts(
 
                 term, docket = case_info
                 transcript = ProcessedTranscript.from_raw(raw_data, term, docket)
+                # Check if output file exists
+                output_path = (
+                    output_dir
+                    / transcript.term
+                    / transcript.case_docket
+                    / transcript.get_filename()
+                )
+
+                if not force and output_path.exists():
+                    skipped_existing += 1
+                    continue
+
                 transcript.save(output_dir, source_path=raw_file)
                 processed_count += 1
 
@@ -234,6 +282,8 @@ def process_transcripts(
     )
     if skipped_no_case > 0:
         console.print(f"  Skipped (no case mapping): {skipped_no_case}")
+    if skipped_existing > 0:
+        console.print(f"  Skipped (existing): {skipped_existing}")
     if error_count > 0:
         console.print(f"[yellow]Warnings:[/yellow] {error_count} files had errors")
     console.print(f"Output: {output_dir}")

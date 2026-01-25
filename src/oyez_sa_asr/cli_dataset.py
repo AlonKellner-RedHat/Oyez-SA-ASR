@@ -180,7 +180,12 @@ def dataset_flex(
     parquet_dir.mkdir(parents=True, exist_ok=True)
 
     console.print("Creating recordings.parquet...")
-    recordings = collect_recordings(audio_src, terms)
+    # Edited by Claude: Pass transcripts_dir and speakers_dir for speaker metadata
+    transcripts_dir = (
+        data_dir / "transcripts" if (data_dir / "transcripts").exists() else None
+    )
+    speakers_dir = data_dir / "speakers" if (data_dir / "speakers").exists() else None
+    recordings = collect_recordings(audio_src, terms, transcripts_dir, speakers_dir)
     if recordings:
         table = pa.Table.from_pylist(recordings)
         pq.write_table(table, parquet_dir / "recordings.parquet")
@@ -188,11 +193,25 @@ def dataset_flex(
 
     # Create utterances parquet
     console.print("Creating utterances.parquet...")
-    utterances = collect_utterances(data_dir / "transcripts", terms)
+    # Edited by Claude: Pass speakers_dir to collect_utterances for justice detection
+    speakers_dir = data_dir / "speakers" if (data_dir / "speakers").exists() else None
+    utterances = collect_utterances(data_dir / "transcripts", terms, speakers_dir)
     if utterances:
         table = pa.Table.from_pylist(utterances)
         pq.write_table(table, parquet_dir / "utterances.parquet")
         console.print(f"  {len(utterances)} utterances")
+
+    # Create speakers parquet
+    # Edited by Claude: Add speakers mode
+    if speakers_dir and speakers_dir.exists():
+        console.print("Creating speakers.parquet...")
+        from .cli_dataset_helpers import collect_speakers  # noqa: PLC0415
+
+        speakers = collect_speakers(speakers_dir, terms)
+        if speakers:
+            table = pa.Table.from_pylist(speakers)
+            pq.write_table(table, parquet_dir / "speakers.parquet")
+            console.print(f"  {len(speakers)} speakers")
 
     # Mark as complete
     current_state.completed = True

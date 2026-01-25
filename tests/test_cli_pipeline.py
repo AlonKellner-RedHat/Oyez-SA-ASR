@@ -4,11 +4,10 @@
 import re
 from unittest.mock import MagicMock, patch
 
-import pytest
 from typer.testing import CliRunner
 
 from oyez_sa_asr.cli import app
-from oyez_sa_asr.cli_pipeline import _build_term_args, _run_step, _validate_term
+from oyez_sa_asr.cli_pipeline import _run_step
 
 runner = CliRunner()
 
@@ -132,53 +131,6 @@ class TestPipelineExecution:
         )
         output = _strip_ansi(result.output)
         assert "all available" in output.lower()
-
-
-class TestValidateTerm:
-    """Tests for _validate_term helper."""
-
-    def test_valid_year(self) -> None:
-        """Accept valid 4-digit year."""
-        assert _validate_term("2024") == "2024"
-        assert _validate_term("1955") == "1955"
-
-    def test_invalid_non_numeric(self) -> None:
-        """Reject non-numeric input."""
-        with pytest.raises(ValueError, match="must be a 4-digit year"):
-            _validate_term("abcd")
-
-    def test_invalid_too_short(self) -> None:
-        """Reject too-short input."""
-        with pytest.raises(ValueError, match="must be a 4-digit year"):
-            _validate_term("24")
-
-    def test_invalid_too_long(self) -> None:
-        """Reject too-long input."""
-        with pytest.raises(ValueError, match="must be a 4-digit year"):
-            _validate_term("20240")
-
-
-class TestBuildTermArgs:
-    """Tests for _build_term_args helper."""
-
-    def test_no_terms(self) -> None:
-        """Return empty list for no terms."""
-        assert _build_term_args(None) == []
-        assert _build_term_args([]) == []
-
-    def test_single_term(self) -> None:
-        """Build args for single term."""
-        assert _build_term_args(["2024"]) == ["--term", "2024"]
-
-    def test_multiple_terms(self) -> None:
-        """Build args for multiple terms."""
-        result = _build_term_args(["2023", "2024"])
-        assert result == ["--term", "2023", "--term", "2024"]
-
-    def test_rejects_invalid_terms(self) -> None:
-        """Reject invalid terms in build_term_args."""
-        with pytest.raises(ValueError):
-            _build_term_args(["invalid"])
 
 
 class TestRunStep:

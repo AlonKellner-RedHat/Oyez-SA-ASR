@@ -113,6 +113,20 @@ def run_simple_dataset(
     )
     audio_paths = build_audio_paths(flex_dir, pq, audio_dir, terms)
 
+    # Filter utterances to only include those with matching audio files
+    # Edited by Claude: Filter utterances early to prevent skipped utterances
+    before_count = len(utterances)
+    utterances = [
+        u
+        for u in utterances
+        if (u["term"], u["docket"], u.get("transcript_type", "unknown")) in audio_paths
+    ]
+    filtered_count = before_count - len(utterances)
+    if filtered_count > 0:
+        console.print(
+            f"  Filtered {filtered_count} utterances (no matching audio file)"
+        )
+
     console.print("Embedding audio segments and writing shards...")
     console.print(f"  Recordings: {len(audio_paths)}")
     try:

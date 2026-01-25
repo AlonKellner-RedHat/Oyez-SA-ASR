@@ -127,20 +127,27 @@ def _process_single_recording_impl(
     for utt, audio_bytes in zip(rec_utterances, segment_bytes_list, strict=True):
         term = utt.get("term", key[0])
         docket = utt.get("docket", key[1])
+        recording_type = utt.get(
+            "transcript_type", key[2] if len(key) > 2 else "unknown"
+        )
         start_sec = utt.get("start_sec", 0)
         end_sec = utt.get("end_sec", 0)
-        segment_name = f"{term}_{docket}_{start_sec:.2f}.flac"
+        segment_name = f"{term}_{docket}_{recording_type}_{start_sec:.2f}.flac"
         # HuggingFace-aligned schema (Edited by Claude, Cursor)
+        # Updated to include recording_type in ID and columns, plus speaker metadata
         row = {
-            "id": f"{term}_{docket}_{start_sec:.2f}",
+            "id": f"{term}_{docket}_{recording_type}_{start_sec:.2f}",
             "audio": {"bytes": audio_bytes, "path": segment_name},
             "sentence": utt.get("text", ""),
             "speaker": utt.get("speaker_name"),
+            "speaker_id": utt.get("speaker_id"),
+            "is_justice": utt.get("is_justice", False),
             "duration": (end_sec - start_sec)
             if end_sec is not None and start_sec is not None
             else 0.0,
             "term": term,
             "docket": docket,
+            "recording_type": recording_type,
             "start_sec": start_sec,
             "end_sec": end_sec,
         }

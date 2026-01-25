@@ -45,24 +45,60 @@ class OyezFlex(datasets.GeneratorBasedBuilder):
             name="utterances",
             description="Utterance-level segments with extracted audio",
         ),
+        datasets.BuilderConfig(
+            name="speakers",
+            description="Speaker statistics and aggregated data",
+        ),
     ]
 
     DEFAULT_CONFIG_NAME = "recordings"
 
     def _info(self) -> datasets.DatasetInfo:
         """Define dataset schema based on config."""
-        if self.config.name == "recordings":
+        if self.config.name == "speakers":
+            # Edited by Claude: by_term as dict mapping term to stats
+            # HuggingFace doesn't support nested dicts directly, so we use a list of dicts
+            features = datasets.Features(
+                {
+                    "speaker_id": datasets.Value("int64"),
+                    "name": datasets.Value("string"),
+                    "role": datasets.Value("string"),
+                    "total_recordings": datasets.Value("int64"),
+                    "total_cases": datasets.Value("int64"),
+                    "total_turns": datasets.Value("int64"),
+                    "total_duration_sec": datasets.Value("float64"),
+                    "total_word_count": datasets.Value("int64"),
+                    "first_appearance": datasets.Value("string"),
+                    "last_appearance": datasets.Value("string"),
+                    "by_term": datasets.Sequence(
+                        datasets.Features(
+                            {
+                                "term": datasets.Value("string"),
+                                "recordings": datasets.Value("int64"),
+                                "turns": datasets.Value("int64"),
+                                "duration_seconds": datasets.Value("float64"),
+                                "word_count": datasets.Value("int64"),
+                            }
+                        )
+                    ),
+                }
+            )
+        elif self.config.name == "recordings":
             features = datasets.Features(
                 {
                     "recording_id": datasets.Value("string"),
                     "audio": datasets.Audio(sampling_rate=22050),
                     "term": datasets.Value("string"),
                     "docket": datasets.Value("string"),
+                    "recording_type": datasets.Value("string"),
                     "duration_sec": datasets.Value("float64"),
                     "sample_rate": datasets.Value("int64"),
                     "channels": datasets.Value("int64"),
                     "source_format": datasets.Value("string"),
                     "source_era": datasets.Value("string"),
+                    "justice_speakers": datasets.Sequence(datasets.Value("int64")),
+                    "other_speakers": datasets.Sequence(datasets.Value("int64")),
+                    "total_speakers": datasets.Value("int64"),
                 }
             )
         else:  # utterances
@@ -72,11 +108,14 @@ class OyezFlex(datasets.GeneratorBasedBuilder):
                     "audio": datasets.Audio(sampling_rate=22050),
                     "text": datasets.Value("string"),
                     "speaker_name": datasets.Value("string"),
+                    "speaker_id": datasets.Value("int64"),
+                    "is_justice": datasets.Value("bool"),
                     "start_sec": datasets.Value("float64"),
                     "end_sec": datasets.Value("float64"),
                     "duration_sec": datasets.Value("float64"),
                     "term": datasets.Value("string"),
                     "docket": datasets.Value("string"),
+                    "recording_type": datasets.Value("string"),
                 }
             )
 
@@ -87,7 +126,7 @@ class OyezFlex(datasets.GeneratorBasedBuilder):
             license=_LICENSE,
         )
 
-    def _split_generators(  # type: ignore[override]
+    def _split_generators(
         self,
         dl_manager: datasets.DownloadManager  # noqa: ARG002
         | datasets.StreamingDownloadManager,
@@ -111,8 +150,10 @@ class OyezFlex(datasets.GeneratorBasedBuilder):
 
         if self.config.name == "recordings":
             yield from self._generate_recordings(data_dir, audio_dir)
-        else:
+        elif self.config.name == "utterances":
             yield from self._generate_utterances(data_dir, audio_dir)
+        elif self.config.name == "speakers":
+            yield from self._generate_speakers(data_dir)
 
     def _generate_recordings(
         self, data_dir: Path, audio_dir: Path
@@ -135,15 +176,21 @@ class OyezFlex(datasets.GeneratorBasedBuilder):
                     "audio": str(audio_path),
                     "term": row["term"],
                     "docket": row["docket"],
+                    "recording_type": row.get(
+                        "transcript_type", row.get("recording_type", "unknown")
+                    ),
                     "duration_sec": row["duration_sec"],
                     "sample_rate": row["sample_rate"],
                     "channels": row["channels"],
                     "source_format": row["source_format"],
                     "source_era": row["source_era"],
+                    "justice_speakers": row.get("justice_speakers", []),
+                    "other_speakers": row.get("other_speakers", []),
+                    "total_speakers": row.get("total_speakers", 0),
                 },
             )
 
-    def _generate_utterances(  # noqa: PLR0912, PLR0915
+    def _generate_utterances(
         self, data_dir: Path, audio_dir: Path
     ) -> Iterator[tuple[int, dict[str, Any]]]:
         """Yield utterance examples with on-the-fly segment extraction."""
@@ -154,10 +201,14 @@ class OyezFlex(datasets.GeneratorBasedBuilder):
             return
 
         # Build recording lookup
+        # Edited by Claude: Use (term, docket, transcript_type) as key
         rec_table = pq.read_table(recordings_pq)
         rec_lookup = {}
         for row in rec_table.to_pylist():
-            key = (row["term"], row["docket"])
+            transcript_type = row.get(
+                "transcript_type", row.get("recording_type", "unknown")
+            )
+            key = (row["term"], row["docket"], transcript_type)
             if key not in rec_lookup:
                 rec_lookup[key] = []
             rec_lookup[key].append(row)
@@ -172,7 +223,8 @@ class OyezFlex(datasets.GeneratorBasedBuilder):
             if not row.get("valid", True):
                 continue
 
-            key = (row["term"], row["docket"])
+            transcript_type = row.get("transcript_type", "unknown")
+            key = (row["term"], row["docket"], transcript_type)
             recs = rec_lookup.get(key, [])
             if not recs:
                 continue
@@ -216,7 +268,7 @@ class OyezFlex(datasets.GeneratorBasedBuilder):
             out_stream: av.AudioStream = out_container.add_stream(  # type: ignore[assignment]
                 "pcm_f32le", rate=sample_rate
             )
-            out_stream.layout = "mono"  # type: ignore[assignment]
+            out_stream.layout = "mono"
             frame = av.AudioFrame.from_ndarray(
                 segment.reshape(1, -1).astype(np.float32), format="flt", layout="mono"
             )
@@ -227,7 +279,10 @@ class OyezFlex(datasets.GeneratorBasedBuilder):
                 out_container.mux(packet)
             out_container.close()
 
-            utt_id = f"{row['term']}_{row['docket']}_{row['turn_index']}"
+            transcript_type = row.get("transcript_type", "unknown")
+            utt_id = (
+                f"{row['term']}_{row['docket']}_{transcript_type}_{row['turn_index']}"
+            )
 
             yield (
                 idx,
@@ -236,11 +291,83 @@ class OyezFlex(datasets.GeneratorBasedBuilder):
                     "audio": {"bytes": output.getvalue(), "path": f"{utt_id}.wav"},
                     "text": row.get("text", ""),
                     "speaker_name": row.get("speaker_name", ""),
+                    "speaker_id": row.get("speaker_id") or 0,
+                    "is_justice": row.get("is_justice", False),
                     "start_sec": row["start_sec"],
                     "end_sec": row["end_sec"],
                     "duration_sec": row["duration_sec"],
                     "term": row["term"],
                     "docket": row["docket"],
+                    "recording_type": transcript_type,
                 },
             )
             idx += 1
+
+    def _generate_speakers(
+        self, data_dir: Path
+    ) -> Iterator[tuple[int, dict[str, Any]]]:
+        """Yield speaker examples from parquet.
+
+        Edited by Claude: Added speakers mode generation.
+        """
+        speakers_pq = data_dir / "speakers.parquet"
+        if not speakers_pq.exists():
+            return
+
+        table = pq.read_table(speakers_pq)
+        for idx, row in enumerate(table.to_pylist()):
+            # Convert by_term dict to list of dicts for Sequence feature
+            by_term_list = [
+                {"term": term, **stats}
+                for term, stats in row.get("by_term", {}).items()
+            ]
+
+            yield (
+                idx,
+                {
+                    "speaker_id": row["speaker_id"],
+                    "name": row["name"],
+                    "role": row["role"],
+                    "total_recordings": row["total_recordings"],
+                    "total_cases": row["total_cases"],
+                    "total_turns": row["total_turns"],
+                    "total_duration_sec": row["total_duration_sec"],
+                    "total_word_count": row["total_word_count"],
+                    "first_appearance": row.get("first_appearance") or "",
+                    "last_appearance": row.get("last_appearance") or "",
+                    "by_term": by_term_list,
+                },
+            )
+
+    def _generate_speakers(
+        self, data_dir: Path
+    ) -> Iterator[tuple[int, dict[str, Any]]]:
+        """Yield speaker examples from parquet."""
+        speakers_pq = data_dir / "speakers.parquet"
+        if not speakers_pq.exists():
+            return
+
+        table = pq.read_table(speakers_pq)
+        for idx, row in enumerate(table.to_pylist()):
+            # Convert by_term dict to list of dicts for Sequence feature
+            by_term_list = [
+                {"term": term, **stats}
+                for term, stats in row.get("by_term", {}).items()
+            ]
+
+            yield (
+                idx,
+                {
+                    "speaker_id": row["speaker_id"],
+                    "name": row["name"],
+                    "role": row["role"],
+                    "total_recordings": row["total_recordings"],
+                    "total_cases": row["total_cases"],
+                    "total_turns": row["total_turns"],
+                    "total_duration_sec": row["total_duration_sec"],
+                    "total_word_count": row["total_word_count"],
+                    "first_appearance": row.get("first_appearance") or "",
+                    "last_appearance": row.get("last_appearance") or "",
+                    "by_term": by_term_list,
+                },
+            )

@@ -138,16 +138,32 @@ class SpeakerProfile:
         if self.last_appearance is None or date_str > self.last_appearance:
             self.last_appearance = date_str
 
-    def detect_role(self) -> str:
+    def detect_role(self, output_dir: Path | None = None) -> str:
         """Detect role based on appearance patterns.
 
         Justices appear in many cases across multiple terms.
         Advocates typically appear in just a few cases.
 
+        If output_dir is provided, checks for existing justice files to preserve
+        justice status even when processing term-filtered subsets.
+
+        Args:
+            output_dir: Optional directory to check for existing justice files.
+
         Returns
         -------
-            "justice" if speaker meets thresholds, otherwise "other"
+            "justice" if speaker meets thresholds or has existing justice file, otherwise "other"
         """
+        # Edited by Claude: Check for existing justice file first
+        # This ensures justices are always recognized regardless of term scope
+        if output_dir is not None:
+            justices_dir = output_dir / "justices"
+            if justices_dir.exists():
+                # Check if any file with this speaker_id exists in justices directory
+                for _existing_file in justices_dir.glob(f"{self.id}_*.json"):
+                    # Found existing justice file - preserve justice status
+                    return "justice"
+
         num_cases = len(self.cases)
         num_terms = len(self._term_stats)
 
@@ -155,12 +171,16 @@ class SpeakerProfile:
             return "justice"
         return "other"
 
-    def finalize(self) -> None:
+    def finalize(self, output_dir: Path | None = None) -> None:
         """Finalize the profile after all appearances have been added.
 
         This determines the role based on collected data.
+        If output_dir is provided, checks for existing justice files to preserve status.
+
+        Args:
+            output_dir: Optional directory to check for existing justice files.
         """
-        self.role = self.detect_role()
+        self.role = self.detect_role(output_dir)
 
     def get_totals(self) -> dict[str, Any]:
         """Get aggregated totals across all recordings."""
@@ -210,11 +230,20 @@ class SpeakerProfile:
         """Save speaker profile to JSON file in role-based subdirectory.
 
         Automatically finalizes the profile (detects role) before saving.
+        Checks for existing justice files to preserve justice status.
+
+        Edited by Claude: Pass output_dir to finalize() to check for existing justice files.
         """
-        self.finalize()
+        self.finalize(output_dir)
         subdir = output_dir / self.get_subdir()
         subdir.mkdir(parents=True, exist_ok=True)
         output_path = subdir / self.get_filename()
+
+        # If moving from other/ to justices/, remove old file
+        other_path = output_dir / "other" / self.get_filename()
+        if other_path.exists() and self.role == "justice":
+            other_path.unlink()
+
         with output_path.open("w") as f:
             json.dump(self.to_dict(), f, indent=2)
         return output_path

@@ -20,6 +20,15 @@ select = [
   "TC",
   "UP",
 ]
-ignore = ["ANN401", "PLR0913", "PLR2004", "S101", "S311", "F403"]
+ignore = [
+  "ANN401",
+  "PLR0913",
+  "PLR0912",
+  "PLR0915",
+  "PLR2004",
+  "S101",
+  "S311",
+  "F403",
+]
 pydocstyle.convention = "numpy"
 pylint.max-args = 10
