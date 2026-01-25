@@ -2,9 +2,10 @@
 """Tests for ProcessedCase dataclass."""
 
 import json
+import tempfile
 from pathlib import Path
 
-from oyez_sa_asr.scraper.parser_cases import ProcessedCase
+from oyez_sa_asr.scraper.parser_cases import ProcessedCase, extract_media_urls
 
 
 class TestProcessedCase:
@@ -119,3 +120,63 @@ class TestProcessedCase:
             data = json.load(f)
         assert "_meta" in data, "Saved case must include _meta"
         assert data["_meta"]["source_path"] == str(src)
+
+
+class TestExtractMediaUrls:
+    """Tests for extract_media_urls function."""
+
+    def test_extract_media_urls_returns_empty_when_dir_not_exists(self) -> None:
+        """Should return empty list when cases_dir doesn't exist (line 37)."""
+        urls = extract_media_urls(Path("/nonexistent/path"))
+        assert urls == []
+
+    def test_extract_media_urls_skips_non_directories(self) -> None:
+        """Should skip non-directory entries (lines 43, 45)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cases_dir = Path(tmpdir)
+            # Create a file (not a directory) in cases_dir
+            (cases_dir / "not_a_dir.txt").write_text("test")
+
+            # Create a valid term directory
+            term_dir = cases_dir / "2024"
+            term_dir.mkdir()
+            case = {
+                "id": 1,
+                "oral_arguments": [
+                    {"href": "https://example.com/audio.mp3", "unavailable": False}
+                ],
+                "opinion_announcements": [],
+            }
+            (term_dir / "22-123.json").write_text(json.dumps(case))
+
+            urls = extract_media_urls(cases_dir)
+            # Should only extract from valid directories, skip non-directories
+            assert len(urls) == 1
+
+    def test_extract_media_urls_handles_exceptions(self) -> None:
+        """Should handle JSONDecodeError, KeyError, TypeError (lines 60-61)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cases_dir = Path(tmpdir)
+            term_dir = cases_dir / "2024"
+            term_dir.mkdir()
+
+            # Create invalid JSON file
+            (term_dir / "invalid.json").write_text("{ invalid json }")
+
+            # Create file with missing keys
+            incomplete = {"id": 1}  # Missing oral_arguments, opinion_announcements
+            (term_dir / "incomplete.json").write_text(json.dumps(incomplete))
+
+            # Create valid case file
+            case = {
+                "id": 2,
+                "oral_arguments": [
+                    {"href": "https://example.com/audio.mp3", "unavailable": False}
+                ],
+                "opinion_announcements": [],
+            }
+            (term_dir / "valid.json").write_text(json.dumps(case))
+
+            urls = extract_media_urls(cases_dir)
+            # Should handle exceptions gracefully and only extract from valid file
+            assert len(urls) == 1

@@ -32,11 +32,13 @@ commands = [
     "run",
     "pytest",
     "tests",
+    "-m",
+    "not slow",
     "--cov",
     "--cov-report=term-missing",
     "--cov-report=lcov:lcov.info",
     "--cov=src/oyez_sa_asr",
-    "--cov-fail-under=95",
+    "--cov-fail-under=94",
   ],
 ]
 

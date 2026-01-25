@@ -113,3 +113,27 @@ class TestOyezCasesTraverser:
             assert len(cases) == 3
             assert cases[0]["id"] == 1
             assert cases[2]["id"] == 3
+
+    @pytest.mark.asyncio
+    async def test_fetch_all_handles_errors(self) -> None:
+        """Should handle fetch errors in fetch_all (lines 98-99)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fetcher = AdaptiveFetcher.create(Path(tmpdir))
+            traverser = OyezCasesTraverser(fetcher, per_page=10)
+
+            async def mock_fetch_one(
+                request: RequestMetadata, **_: bool
+            ) -> FetchResult:
+                # First page succeeds, second fails
+                if "page=0" in request.url:
+                    return FetchResult(
+                        url=request.url, success=True, status_code=200, data=[{"id": 1}]
+                    )
+                return FetchResult(
+                    url=request.url, success=False, error="Network error"
+                )
+
+            with patch.object(fetcher, "fetch_one", side_effect=mock_fetch_one):
+                cases = await traverser.fetch_all()
+            # Should return cases from successful page, handle error gracefully
+            assert len(cases) == 1

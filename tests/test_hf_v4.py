@@ -5,6 +5,8 @@ These tests verify that datasets can be loaded via parquet auto-discovery
 in HuggingFace datasets v4.x, where loading scripts are no longer supported.
 """
 
+from pathlib import Path
+
 import pytest
 
 from oyez_sa_asr.hf_compat import is_v4
@@ -23,10 +25,9 @@ class TestV4VersionDetection:
 class TestV4ParquetAutoDiscovery:
     """Tests for parquet auto-discovery loading in v4.x."""
 
+    @pytest.mark.slow
     def test_raw_loads_via_parquet(self) -> None:
         """Load raw dataset via parquet auto-discovery."""
-        from pathlib import Path
-
         from datasets import load_dataset  # noqa: PLC0415
 
         # Skip if dataset files don't exist
@@ -48,8 +49,6 @@ class TestV4ParquetAutoDiscovery:
 
     def test_flex_recordings_loads_via_parquet(self) -> None:
         """Load flex recordings config via parquet auto-discovery."""
-        from pathlib import Path
-
         # Skip if dataset files don't exist
         flex_data_dir = Path("datasets/flex/data")
         if not (flex_data_dir / "recordings.parquet").exists():
@@ -65,8 +64,6 @@ class TestV4ParquetAutoDiscovery:
 
     def test_flex_utterances_loads_via_parquet(self) -> None:
         """Load flex utterances config via parquet (metadata only, no audio)."""
-        from pathlib import Path
-
         # Skip if dataset files don't exist
         flex_data_dir = Path("datasets/flex/data")
         if not (flex_data_dir / "utterances.parquet").exists():
@@ -80,10 +77,9 @@ class TestV4ParquetAutoDiscovery:
             "use loading script instead"
         )
 
+    @pytest.mark.slow
     def test_streaming_mode_returns_iterable(self) -> None:
         """Verify streaming mode returns an iterable dataset."""
-        from pathlib import Path
-
         from datasets import IterableDataset, load_dataset  # noqa: PLC0415
 
         # Skip if dataset files don't exist

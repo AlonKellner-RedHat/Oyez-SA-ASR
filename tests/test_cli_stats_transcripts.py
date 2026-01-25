@@ -9,6 +9,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from oyez_sa_asr.cli import app
+from oyez_sa_asr.cli_stats_transcripts import _get_speaker_bucket
 
 runner = CliRunner()
 
@@ -186,3 +187,88 @@ class TestStatsTranscriptsDisplay:
             assert result.exit_code == 0
             assert "Top 10 recordings by speaker count" in output
             assert "2024/docket (oral_argument) - 10 speakers" in output
+
+    def test_handles_non_directory_entries(self) -> None:
+        """Should skip non-directory entries (lines 61, 64)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir)
+            transcripts_dir = data_dir / "transcripts"
+            transcripts_dir.mkdir(parents=True)
+
+            # Create a file (not a directory) in transcripts_dir
+            (transcripts_dir / "not_a_dir.txt").write_text("test")
+
+            # Create a valid term directory with a file (not a directory) inside
+            term_dir = transcripts_dir / "2024"
+            term_dir.mkdir()
+            (term_dir / "not_a_dir.json").write_text("test")
+
+            # Create a valid docket directory
+            docket_dir = term_dir / "22-123"
+            docket_dir.mkdir()
+            transcript = {"type": "oral_argument", "turns": []}
+            (docket_dir / "transcript.json").write_text(json.dumps(transcript))
+
+            result = runner.invoke(
+                app, ["stats", "transcripts", "--data-dir", str(data_dir)]
+            )
+            output = _strip_ansi(result.output)
+
+            assert result.exit_code == 0
+            # Should only count the valid transcript, skip non-directories
+            assert "Total transcripts: 1" in output
+
+    def test_handles_invalid_json_files(self) -> None:
+        """Should handle JSON decode errors gracefully (lines 108-109)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir)
+            trans_dir = data_dir / "transcripts" / "2024" / "22-123"
+            trans_dir.mkdir(parents=True)
+
+            # Create invalid JSON file
+            (trans_dir / "invalid.json").write_text("{ invalid json }")
+
+            # Create valid transcript
+            transcript = {"type": "oral_argument", "turns": []}
+            (trans_dir / "valid.json").write_text(json.dumps(transcript))
+
+            result = runner.invoke(
+                app, ["stats", "transcripts", "--data-dir", str(data_dir)]
+            )
+            output = _strip_ansi(result.output)
+
+            assert result.exit_code == 0
+            # Should only count the valid transcript
+            assert "Total transcripts: 1" in output
+
+    def test_handles_missing_keys_in_transcript_data(self) -> None:
+        """Should handle KeyError when transcript data is missing required keys (lines 108-109)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir)
+            trans_dir = data_dir / "transcripts" / "2024" / "22-123"
+            trans_dir.mkdir(parents=True)
+
+            # Create transcript file with missing keys
+            incomplete_transcript = {"type": "oral_argument"}  # Missing turns
+            (trans_dir / "incomplete.json").write_text(
+                json.dumps(incomplete_transcript)
+            )
+
+            # Create valid transcript
+            transcript = {"type": "oral_argument", "turns": []}
+            (trans_dir / "valid.json").write_text(json.dumps(transcript))
+
+            result = runner.invoke(
+                app, ["stats", "transcripts", "--data-dir", str(data_dir)]
+            )
+            output = _strip_ansi(result.output)
+
+            assert result.exit_code == 0
+            # Should handle KeyError gracefully
+            assert "Total transcripts: 1" in output or "Total transcripts: 2" in output
+
+    def test_speaker_bucket_11_plus(self) -> None:
+        """Should return '11+' for speakers > 10 (line 34)."""
+        assert _get_speaker_bucket(11) == "11+"
+        assert _get_speaker_bucket(15) == "11+"
+        assert _get_speaker_bucket(100) == "11+"

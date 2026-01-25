@@ -179,3 +179,78 @@ class TestSpeakerProfile:
         """Generate correct filename."""
         profile = SpeakerProfile(id=15049, name="John G. Roberts, Jr.")
         assert profile.get_filename() == "15049_john_g_roberts_jr.json"
+
+    def test_update_appearance_dates_with_empty_string(self) -> None:
+        """Should return early when date_str is empty (line 134)."""
+        profile = SpeakerProfile(id=123, name="Test Speaker")
+        profile.update_appearance_dates("2024-01-15")
+        original_first = profile.first_appearance
+        original_last = profile.last_appearance
+
+        # Update with empty string - should return early
+        profile.update_appearance_dates("")
+        # Note: update_appearance_dates expects str, not None, so we skip None test
+
+        # Dates should remain unchanged
+        assert profile.first_appearance == original_first
+        assert profile.last_appearance == original_last
+
+    def test_detect_role_checks_existing_justice_file(self) -> None:
+        """Should check for existing justice files (lines 163-165)."""
+        profile = SpeakerProfile(id=123, name="Test Speaker")
+        # Don't add enough appearances to be auto-detected as justice
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir)
+            justices_dir = output_dir / "justices"
+            justices_dir.mkdir()
+
+            # Create an existing justice file for this speaker
+            (justices_dir / "123_test_speaker.json").write_text('{"id": 123}')
+
+            # Should detect as justice based on existing file
+            role = profile.detect_role(output_dir)
+            assert role == "justice"
+
+    def test_save_removes_old_file_when_moving_to_justices(self) -> None:
+        """Should remove old file when moving from other/ to justices/ (line 245)."""
+        profile = SpeakerProfile(id=123, name="Test Speaker")
+        profile.add_appearance(
+            term="2024",
+            docket="23-1234",
+            case_name="Test Case",
+            transcript_type="oral_argument",
+            turns=10,
+            duration_seconds=100.0,
+            word_count=500,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir)
+            other_dir = output_dir / "other"
+            other_dir.mkdir()
+
+            # Save to other/ first
+            old_path = profile.save(output_dir)
+            assert old_path.exists()
+            assert old_path.parent.name == "other"
+
+            # Add enough appearances to become a justice
+            for term in ["2018", "2019", "2020", "2021", "2022"]:
+                for i in range(50):
+                    profile.add_appearance(
+                        term=term,
+                        docket=f"{term[-2:]}-{i}",
+                        case_name=f"Case {i}",
+                        transcript_type="oral_argument",
+                        turns=5,
+                        duration_seconds=100.0,
+                        word_count=500,
+                    )
+
+            # Save again - should move to justices/ and remove old file
+            new_path = profile.save(output_dir)
+            assert new_path.exists()
+            assert new_path.parent.name == "justices"
+            # Old file should be removed
+            assert not old_path.exists()

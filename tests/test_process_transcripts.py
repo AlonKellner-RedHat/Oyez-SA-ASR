@@ -3,6 +3,7 @@
 
 from oyez_sa_asr.scraper.parser_transcripts import (
     ProcessedTurn,
+    _validate_turn,
     parse_transcript_type,
 )
 
@@ -95,6 +96,18 @@ class TestProcessedTurn:
         turn = ProcessedTurn.from_raw(raw_turn, index=0, section_index=0)
 
         assert turn.is_valid is False
+
+    def test_validate_turn_wpm_too_high(self) -> None:
+        """Test _validate_turn with WPM > 600 (line 73)."""
+        # 20 seconds with 250 words = 750 wpm (too high)
+        is_valid, reason = _validate_turn(
+            duration=20.0,
+            word_count=250,
+            text="word " * 250,
+            overlap_seconds=0.0,
+        )
+        assert is_valid is False
+        assert reason is not None and "wpm_too_high" in reason
 
     def test_invalid_empty_text(self) -> None:
         """Turn with empty text is invalid."""

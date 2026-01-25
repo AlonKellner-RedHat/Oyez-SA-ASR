@@ -142,3 +142,29 @@ class TestPublishSimple:
                 private=True,
                 exist_ok=True,
             )
+
+    def test_handles_missing_huggingface_hub(self) -> None:
+        """Should handle ImportError when huggingface_hub is not installed."""
+        with (
+            patch.dict("sys.modules", {"huggingface_hub": None}),
+            tempfile.TemporaryDirectory() as tmpdir,
+        ):
+            dataset_dir = Path(tmpdir) / "dataset"
+            dataset_dir.mkdir()
+            (dataset_dir / "index.json").write_text("{}")
+
+            result = runner.invoke(
+                app,
+                [
+                    "publish",
+                    "simple",
+                    "--dataset-dir",
+                    str(dataset_dir),
+                ],
+            )
+
+            assert result.exit_code == 1
+            assert (
+                "huggingface-hub not installed" in result.output.lower()
+                or "Error" in result.output
+            )

@@ -207,3 +207,43 @@ class TestPipelineWithMockedSubprocess:
         output = _strip_ansi(result.output)
         assert "Failed steps" in output
         assert result.exit_code == 1
+
+    def test_enhanced_term_parsing(self) -> None:
+        """Test enhanced term parsing with ranges and abbreviations."""
+        result = runner.invoke(
+            app,
+            [
+                "pipeline",
+                "run",
+                "--term",
+                "98-00,22",
+                "--skip-scrape",
+                "--skip-process",
+                "--skip-dataset",
+            ],
+        )
+        output = _strip_ansi(result.output)
+        assert result.exit_code == 0
+        # Should expand to 1998, 1999, 2000, 2022
+        assert (
+            "1998" in output or "1999" in output or "2000" in output or "2022" in output
+        )
+
+    def test_delegated_options_display(self) -> None:
+        """Test that delegated options are displayed."""
+        result = runner.invoke(
+            app,
+            [
+                "pipeline",
+                "run",
+                "--process-force",
+                "--dataset-force",
+                "--skip-scrape",
+                "--skip-process",
+                "--skip-dataset",
+            ],
+        )
+        output = _strip_ansi(result.output)
+        assert result.exit_code == 0
+        # Should show delegated options
+        assert "Delegated options" in output or "force" in output.lower()

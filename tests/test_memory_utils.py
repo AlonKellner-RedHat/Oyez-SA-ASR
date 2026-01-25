@@ -2,11 +2,14 @@
 """Tests for memory_utils module (OOM detection and orphan cleanup)."""
 
 import subprocess
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from oyez_sa_asr.memory_utils import (
+    check_oom,
     get_memory_usage_mb,
     get_oom_kill_count,
+    get_swap_usage_mb,
     kill_orphan_workers,
     set_pdeathsig,
 )
@@ -118,3 +121,108 @@ class TestGetMemoryUsageMb:
             assert total == 16000
             assert used == 8000
             assert available == 10000
+
+    def test_get_oom_kill_count_handles_exceptions(self) -> None:
+        """Verify get_oom_kill_count handles OSError, ValueError, IndexError (lines 44-45)."""
+        # Test OSError (file read error)
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch("pathlib.Path.read_text", side_effect=OSError("Permission denied")),
+        ):
+            result = get_oom_kill_count()
+            assert result == 0
+
+        # Test ValueError (invalid content)
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch("pathlib.Path.read_text", return_value="oom_kill not_a_number"),
+        ):
+            result = get_oom_kill_count()
+            assert result == 0
+
+        # Test IndexError (malformed line)
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch("pathlib.Path.read_text", return_value="oom_kill"),
+        ):
+            result = get_oom_kill_count()
+            assert result == 0
+
+
+class TestGetSwapUsageMb:
+    """Tests for get_swap_usage_mb function."""
+
+    def test_get_swap_usage_mb_handles_missing_free(self) -> None:
+        """Verify get_swap_usage_mb returns zeros when free unavailable (lines 85-87)."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = FileNotFoundError("free not found")
+            result = get_swap_usage_mb()
+            assert result == (0, 0)
+
+    def test_get_swap_usage_mb_handles_exceptions(self) -> None:
+        """Verify get_swap_usage_mb handles exceptions gracefully."""
+        # Test SubprocessError
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = subprocess.SubprocessError("error")
+            result = get_swap_usage_mb()
+            assert result == (0, 0)
+
+        # Test ValueError/IndexError (malformed output)
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(stdout="Invalid output", returncode=0)
+            result = get_swap_usage_mb()
+            assert result == (0, 0)
+
+    def test_get_swap_usage_mb_parses_output(self) -> None:
+        """Verify get_swap_usage_mb parses free output correctly."""
+        mock_output = (
+            "              total        used        free      shared  "
+            "buff/cache   available\n"
+            "Mem:          16000        8000        2000         500        "
+            "5500       10000\n"
+            "Swap:         4000        1000        3000\n"
+        )
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(stdout=mock_output, returncode=0)
+            used, total = get_swap_usage_mb()
+            assert total == 4000
+            assert used == 1000
+
+
+class TestCheckOom:
+    """Tests for check_oom function."""
+
+    def test_check_oom_logs_when_oom_detected(self) -> None:
+        """Verify check_oom logs error when OOM kill detected (lines 128-130)."""
+        initial_oom = 0
+        last_path = Path("/test/path.flac")
+
+        # Mock OOM kill count increase
+        with (
+            patch("oyez_sa_asr.memory_utils.get_oom_kill_count", return_value=1),
+            patch(
+                "oyez_sa_asr.memory_utils.get_memory_usage_mb",
+                return_value=(8000, 2000, 10000),
+            ),
+            patch("oyez_sa_asr.memory_utils.logger") as mock_logger,
+        ):
+            check_oom(initial_oom, last_path)
+            # Should log error
+            mock_logger.error.assert_called_once()
+            call_args = mock_logger.error.call_args[0][0]
+            assert "DETECTED" in call_args
+            assert "OOM KILL" in call_args
+
+    def test_check_oom_no_log_when_no_oom(self) -> None:
+        """Verify check_oom doesn't log when no OOM detected."""
+        initial_oom = 0
+        last_path = Path("/test/path.flac")
+
+        # Mock no OOM kill
+        with (
+            patch("oyez_sa_asr.memory_utils.get_oom_kill_count", return_value=0),
+            patch("oyez_sa_asr.memory_utils.logger") as mock_logger,
+        ):
+            check_oom(initial_oom, last_path)
+            # Should not log error
+            mock_logger.error.assert_not_called()

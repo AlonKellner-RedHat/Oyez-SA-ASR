@@ -23,7 +23,7 @@ class TestUnixTimestampToIso:
         assert result == "1966-01-17"
 
     def test_none_timestamp(self) -> None:
-        """Should return None for None input."""
+        """Should return None for None input (tests _unix_to_iso line 32)."""
         assert unix_timestamp_to_iso(None) is None
 
 
@@ -44,10 +44,22 @@ class TestTimelineEvent:
         assert event.event == "Decided"
         assert event.date == "1966-01-17"
 
+    def test_from_raw_with_none_dates(self) -> None:
+        """Should handle None dates (tests _unix_to_iso line 32)."""
+        raw = {"event": "Argued", "dates": []}
+        event = TimelineEvent.from_raw(raw)
+        assert event.event == "Argued"
+        assert event.date is None
+
     def test_to_dict(self) -> None:
-        """Should serialize to dict."""
+        """Should serialize to dict (line 102)."""
         event = TimelineEvent(event="Argued", date="2020-01-15")
         assert event.to_dict() == {"event": "Argued", "date": "2020-01-15"}
+
+    def test_to_dict_with_none_date(self) -> None:
+        """Should serialize to dict with None date."""
+        event = TimelineEvent(event="Argued", date=None)
+        assert event.to_dict() == {"event": "Argued", "date": None}
 
 
 class TestCitation:

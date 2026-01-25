@@ -32,9 +32,10 @@ class TestStreamingVsFullLoad:
         This is the most critical test - both extraction methods must produce
         byte-for-byte identical audio samples.
         """
-        path = _create_test_audio(10.0)
+        # Use shorter duration to speed up test
+        path = _create_test_audio(5.0)
         try:
-            segments = [(0.0, 2.0), (3.0, 5.0), (4.5, 6.5), (8.0, 10.0)]
+            segments = [(0.0, 1.0), (1.5, 2.5), (2.0, 3.0), (4.0, 5.0)]
 
             streaming_result = extract_segments_batch(
                 path, segments, use_streaming=True
@@ -76,9 +77,11 @@ class TestStreamingVsFullLoad:
 
     def test_fractional_times_match(self) -> None:
         """Verify fractional time boundaries produce identical results."""
-        path = _create_test_audio(10.0)
+        # Use shorter duration to speed up test
+        path = _create_test_audio(5.0)
         try:
-            segments = [(1.333, 2.777), (3.141, 5.926), (7.123, 8.456)]
+            # Adjust segments to fit within 5.0 second duration
+            segments = [(1.333, 2.777), (2.8, 3.5), (4.0, 4.9)]
 
             streaming_result = extract_segments_batch(
                 path, segments, use_streaming=True

@@ -123,6 +123,7 @@ class TestAdaptiveFetcher:
             assert fetched.status_code == 404
 
     @pytest.mark.asyncio
+    @pytest.mark.slow
     async def test_fetch_handles_request_error(self) -> None:
         """Should handle connection errors gracefully."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -162,3 +163,36 @@ class TestAdaptiveFetcher:
             cached = fetcher.downloader.check_cache(request)
             assert cached is not None
             assert cached.from_cache is True
+
+    @pytest.mark.asyncio
+    async def test_partition_cached_with_force_mode(self) -> None:
+        """Force mode should skip cache and fetch all requests (line 59)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fetcher = AdaptiveFetcher.create(Path(tmpdir))
+            request1 = RequestMetadata(url="https://example.com/test1")
+            request2 = RequestMetadata(url="https://example.com/test2")
+
+            # Cache one request
+            cached_result = FetchResult(
+                url=request1.url,
+                success=True,
+                status_code=200,
+                data={"cached": True},
+            )
+            _get_httpx_downloader(fetcher).cache.set(request1, cached_result)
+
+            # With force=True, should skip cache and fetch both
+            results, needs_fetch = fetcher._partition_cached(
+                [request1, request2], force=True
+            )
+            assert len(results) == 0  # No cached results returned
+            assert len(needs_fetch) == 2  # Both need to be fetched
+
+    def test_create_with_s3_downloader(self) -> None:
+        """Should create fetcher with S3Downloader (lines 169-176)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fetcher = AdaptiveFetcher.create_s3(Path(tmpdir))
+            assert fetcher.downloader is not None
+            # Verify it's an S3Downloader by checking it has S3-specific attributes
+            assert hasattr(fetcher.downloader, "max_retries")
+            assert hasattr(fetcher.downloader, "check_cache")

@@ -188,3 +188,38 @@ class TestS3DownloaderFetch:
             async with downloader.create_client() as client:
                 # Client should be created successfully
                 assert client is not None
+
+    def test_check_unavailable_handles_exceptions(self) -> None:
+        """Should handle JSONDecodeError and KeyError (lines 124-126)."""
+        # Note: The method is _check_unavailable_cache (private), tested via check_cache
+        with tempfile.TemporaryDirectory() as tmpdir:
+            downloader = S3Downloader(Path(tmpdir))
+            request = RequestMetadata(
+                url="https://s3.amazonaws.com/bucket/path/file.mp3"
+            )
+            unavailable_path = downloader._get_unavailable_path(request)
+            unavailable_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Test JSONDecodeError
+            unavailable_path.write_text("{ invalid json }")
+            result = downloader._check_unavailable_cache(request)
+            assert result is None
+            assert not unavailable_path.exists()  # Should be deleted
+
+            # Test missing error key - method uses .get() so no KeyError is raised
+            # It returns a FetchResult with error=None
+            unavailable_path.parent.mkdir(parents=True, exist_ok=True)
+            unavailable_path.write_text('{"status_code": 404}')  # Missing error
+            result = downloader._check_unavailable_cache(request)
+            # Should return a result (no KeyError because .get() is used)
+            assert result is not None
+            assert result.status_code == 404
+            assert result.error is None  # Missing key becomes None
+
+    def test_check_cache_handles_invalid_url(self) -> None:
+        """Should return None for invalid S3 URL (lines 132-133)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            downloader = S3Downloader(Path(tmpdir))
+            request = RequestMetadata(url="https://example.com/not-s3")
+            result = downloader.check_cache(request)
+            assert result is None

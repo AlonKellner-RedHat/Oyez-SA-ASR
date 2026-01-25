@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, patch
 from typer.testing import CliRunner
 
 from oyez_sa_asr.cli import app
+from oyez_sa_asr.scraper.models import FetchResult
 
 runner = CliRunner()
 
@@ -47,6 +48,103 @@ class TestScrapeIndex:
         assert "--cache-dir" in output
         assert "--max-pages" in output
 
+    def test_scrape_index_with_force_mode(self) -> None:
+        """Should display force mode message (line 56)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            # Mock OyezCasesTraverser to avoid real network requests
+            with patch(
+                "oyez_sa_asr.cli_scrape.OyezCasesTraverser"
+            ) as mock_traverser_cls:
+                mock_traverser = mock_traverser_cls.return_value
+                mock_traverser.fetch_all = AsyncMock(return_value=[])
+
+                result = runner.invoke(
+                    app,
+                    [
+                        "scrape",
+                        "index",
+                        "--cache-dir",
+                        str(cache_dir),
+                        "--force",
+                    ],
+                )
+                output = strip_ansi(result.output)
+                assert "Force mode" in output
+
+    def test_scrape_cases_with_terms_and_force(self) -> None:
+        """Should display terms and force mode messages (lines 116, 121)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            index_file = Path(tmpdir) / "index.json"
+            index_file.write_text('{"cases": []}')
+
+            result = runner.invoke(
+                app,
+                [
+                    "scrape",
+                    "cases",
+                    "--index-file",
+                    str(index_file),
+                    "--cache-dir",
+                    str(cache_dir),
+                    "--term",
+                    "2024",
+                    "--force",
+                ],
+            )
+            output = strip_ansi(result.output)
+            assert "Terms: 2024" in output
+            assert "Force mode" in output
+
+    def test_scrape_cases_on_progress_callback(self) -> None:
+        """Should call on_progress callback during fetching (lines 150-162)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            index_file = Path(tmpdir) / "index.json"
+            index_file.write_text(
+                json.dumps(
+                    {
+                        "cases": [
+                            {
+                                "href": "https://api.oyez.org/cases/2024/22-123",
+                                "term": "2024",
+                            }
+                        ]
+                    }
+                )
+            )
+
+            with patch("oyez_sa_asr.cli_scrape.AdaptiveFetcher") as mock_fetcher_cls:
+                mock_fetcher = mock_fetcher_cls.create.return_value
+                mock_fetcher.fetch_batch_adaptive = AsyncMock(return_value=[])
+
+                result = runner.invoke(
+                    app,
+                    [
+                        "scrape",
+                        "cases",
+                        "--index-file",
+                        str(index_file),
+                        "--cache-dir",
+                        str(cache_dir),
+                    ],
+                )
+
+                assert result.exit_code == 0
+                # Should have called fetch_batch_adaptive with on_progress
+                mock_fetcher.fetch_batch_adaptive.assert_called_once()
+                call_args = mock_fetcher.fetch_batch_adaptive.call_args
+                # on_progress is passed as second positional argument
+                assert len(call_args[0]) >= 2, (
+                    "on_progress should be passed as positional arg"
+                )
+                assert callable(call_args[0][1]), (
+                    "Second positional arg should be callable (on_progress)"
+                )
+                call_kwargs = call_args[1] if len(call_args) > 1 else {}
+                assert call_kwargs.get("force") is False
+
     def test_scrape_index_default_cache_dir(self) -> None:
         """Should use .cache/index as default cache directory."""
         with (
@@ -83,6 +181,61 @@ class TestScrapeCases:
                 ],
             )
             assert result.exit_code != 0 or "not found" in result.output.lower()
+
+    def test_scrape_cases_on_progress_creates_pbar(self) -> None:
+        """Should create progress bar when on_progress is called (lines 150-162)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            index_file = Path(tmpdir) / "index.json"
+            index_file.write_text(
+                json.dumps(
+                    {
+                        "cases": [
+                            {
+                                "href": "https://api.oyez.org/cases/2024/22-123",
+                                "term": "2024",
+                            }
+                        ]
+                    }
+                )
+            )
+
+            with patch("oyez_sa_asr.cli_scrape.AdaptiveFetcher") as mock_fetcher_cls:
+                mock_fetcher = mock_fetcher_cls.create.return_value
+                # Return a result to trigger on_progress
+                success_result = FetchResult(
+                    url="https://api.oyez.org/cases/2024/22-123",
+                    success=True,
+                    status_code=200,
+                )
+                mock_fetcher.fetch_batch_adaptive = AsyncMock(
+                    return_value=[success_result]
+                )
+
+                result = runner.invoke(
+                    app,
+                    [
+                        "scrape",
+                        "cases",
+                        "--index-file",
+                        str(index_file),
+                        "--cache-dir",
+                        str(cache_dir),
+                    ],
+                )
+
+                assert result.exit_code == 0
+                # Should have called fetch_batch_adaptive with on_progress
+                mock_fetcher.fetch_batch_adaptive.assert_called_once()
+                call_args = mock_fetcher.fetch_batch_adaptive.call_args
+                # on_progress is passed as second positional argument
+                assert len(call_args[0]) >= 2, (
+                    "on_progress should be passed as positional arg"
+                )
+                assert callable(call_args[0][1]), (
+                    "Second positional arg should be callable (on_progress)"
+                )
+                call_args[1] if len(call_args) > 1 else {}
 
     def test_scrape_cases_reads_index_and_fetches(self) -> None:
         """Should read index and fetch case details."""
@@ -251,6 +404,142 @@ class TestClearCommands:
 
             assert result.exit_code == 0
             assert "does not exist" in result.output
+
+    def test_clear_index_confirmation_cancelled(self) -> None:
+        """Should cancel when user says no to confirmation prompt."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache" / "index"
+            data_dir = Path(tmpdir) / "data" / "index"
+
+            cache_dir.mkdir(parents=True)
+            (cache_dir / "test.json").write_text("{}")
+            data_dir.mkdir(parents=True)
+            (data_dir / "cases_index.json").write_text("{}")
+
+            # Mock typer.confirm to return False (user cancels)
+            with patch("oyez_sa_asr.cli_clear.typer.confirm", return_value=False):
+                result = runner.invoke(
+                    app,
+                    [
+                        "clear",
+                        "index",
+                        "--cache-dir",
+                        str(cache_dir),
+                        "--data-dir",
+                        str(data_dir),
+                        # No --force flag
+                    ],
+                )
+
+                assert result.exit_code == 0
+                assert (
+                    "Cancelled" in result.output or "cancelled" in result.output.lower()
+                )
+                # Directories should still exist
+                assert cache_dir.exists()
+                assert data_dir.exists()
+
+    def test_clear_audio_cache_only_with_confirmation(self) -> None:
+        """Should clear audio cache with confirmation prompt."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache" / "audio"
+            cache_dir.mkdir(parents=True)
+            (cache_dir / "test.mp3").write_text("test")
+
+            # Mock typer.confirm to return True (user confirms)
+            with patch("oyez_sa_asr.cli_clear.typer.confirm", return_value=True):
+                result = runner.invoke(
+                    app,
+                    [
+                        "clear",
+                        "audio",
+                        "--cache-dir",
+                        str(cache_dir),
+                        # No --force flag
+                    ],
+                )
+
+                assert result.exit_code == 0
+                assert not cache_dir.exists()
+
+    def test_clear_audio_cache_only_confirmation_cancelled(self) -> None:
+        """Should cancel audio cache clear when user says no."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache" / "audio"
+            cache_dir.mkdir(parents=True)
+            (cache_dir / "test.mp3").write_text("test")
+
+            # Mock typer.confirm to return False (user cancels)
+            with patch("oyez_sa_asr.cli_clear.typer.confirm", return_value=False):
+                result = runner.invoke(
+                    app,
+                    [
+                        "clear",
+                        "audio",
+                        "--cache-dir",
+                        str(cache_dir),
+                        # No --force flag
+                    ],
+                )
+
+                assert result.exit_code == 0
+                assert (
+                    "Cancelled" in result.output or "cancelled" in result.output.lower()
+                )
+                # Directory should still exist
+                assert cache_dir.exists()
+
+    def test_clear_speakers_data_only_with_confirmation(self) -> None:
+        """Should clear speakers data with confirmation prompt."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir) / "data" / "speakers"
+            data_dir.mkdir(parents=True)
+            (data_dir / "justices").mkdir()
+            (data_dir / "justices" / "test.json").write_text("{}")
+
+            # Mock typer.confirm to return True (user confirms)
+            with patch("oyez_sa_asr.cli_clear.typer.confirm", return_value=True):
+                result = runner.invoke(
+                    app,
+                    [
+                        "clear",
+                        "speakers",
+                        "--data-dir",
+                        str(data_dir),
+                        # No --force flag
+                    ],
+                )
+
+                assert result.exit_code == 0
+                assert not data_dir.exists()
+
+    def test_clear_speakers_data_only_confirmation_cancelled(self) -> None:
+        """Should cancel speakers clear when user says no."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir) / "data" / "speakers"
+            data_dir.mkdir(parents=True)
+            (data_dir / "justices").mkdir()
+            (data_dir / "justices" / "test.json").write_text("{}")
+
+            # Mock typer.confirm to return False (user cancels)
+            with patch("oyez_sa_asr.cli_clear.typer.confirm", return_value=False):
+                result = runner.invoke(
+                    app,
+                    [
+                        "clear",
+                        "speakers",
+                        "--data-dir",
+                        str(data_dir),
+                        # No --force flag
+                    ],
+                )
+
+                assert result.exit_code == 0
+                assert (
+                    "Cancelled" in result.output or "cancelled" in result.output.lower()
+                )
+                # Directory should still exist
+                assert data_dir.exists()
 
 
 class TestMainCommand:

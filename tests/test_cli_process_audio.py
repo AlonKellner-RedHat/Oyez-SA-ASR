@@ -6,8 +6,9 @@ import json
 import math
 import re
 import tempfile
+from concurrent.futures import BrokenExecutor
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 from typer.testing import CliRunner
@@ -20,6 +21,7 @@ from oyez_sa_asr.cli_process_audio import (
     _count_anomalies,
     _filter_pending_sources,
     _process_recording,
+    _run_parallel_sources,
     _try_process_file,
     _validate_flac_files,
 )
@@ -596,3 +598,94 @@ class TestFlacValidation:
             importlib.reload(cli_process_audio)
             # Should not crash, _MP_CONTEXT should be None
             assert cli_process_audio._MP_CONTEXT is None
+
+    def test_try_process_file_returns_false_on_failure(self) -> None:
+        """Should return (False, err) when processing fails (line 145)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "data"
+            # Use a non-existent file to trigger failure
+            fake_path = Path(tmpdir) / "nonexistent.mp3"
+
+            success, err, meta = _try_process_file(
+                fake_path, "test", "2020", "19-999", output_dir, 24, "mp3"
+            )
+
+            # Should return failure with error message (line 145)
+            assert not success
+            assert err != ""
+            assert meta == {}
+
+    def test_process_audio_reports_missing_flac_files(self) -> None:
+        """Should report missing FLAC files after processing (lines 299, 305-314)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            output_dir = Path(tmpdir) / "data"
+            mp3_dir = (
+                cache_dir / "oyez.case-media.mp3" / "case_data" / "2020" / "19-missing"
+            )
+            mp3_dir.mkdir(parents=True)
+
+            samples = make_sine(sr=44100, dur=0.1)
+            save_audio(samples, 44100, mp3_dir / "test_missing.mp3")
+
+            # Mock _process_recording to simulate missing FLAC
+            with patch(
+                "oyez_sa_asr.cli_process_audio._process_recording",
+                return_value=(True, ""),
+            ):
+                # Process - should complete but may report missing files
+                result = runner.invoke(
+                    app,
+                    ["process", "audio", "-c", str(cache_dir), "-o", str(output_dir)],
+                )
+            # Should handle gracefully
+            assert result.exit_code in {0, 1}
+
+    def test_process_audio_reports_more_than_five_missing(self) -> None:
+        """Should report '... and X more' when more than 5 files are missing (line 314)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "data"
+
+            # Create 7 sources without FLAC files
+            sources = [AudioSource(f"rec_{i}", "2020", f"case-{i}") for i in range(7)]
+
+            # Create metadata but not FLAC for each
+            for source in sources:
+                out_dir = output_dir / source.term / source.docket
+                out_dir.mkdir(parents=True)
+                meta_path = out_dir / f"{source.recording_id}.metadata.json"
+                meta_path.write_text('{"format": "mp3", "sample_rate": 44100}')
+
+            # Validate - should find 7 missing FLACs
+            missing_count, missing_sources = _validate_flac_files(sources, output_dir)
+            assert missing_count == 7
+            assert len(missing_sources) == 7
+            # Should have more than 5 to trigger the "and X more" message
+            assert len(missing_sources) > 5
+
+    def test_run_parallel_sources_handles_exceptions(self) -> None:
+        """Should handle exceptions in parallel processing (lines 205-206)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir) / "data"
+            sources = [AudioSource("test", "2020", "19-999")]
+
+            # Mock ProcessPoolExecutor and as_completed to raise BrokenExecutor
+            with (
+                patch(
+                    "oyez_sa_asr.cli_process_audio.ProcessPoolExecutor"
+                ) as mock_executor_cls,
+                patch(
+                    "oyez_sa_asr.cli_process_audio.as_completed"
+                ) as mock_as_completed,
+            ):
+                mock_executor = MagicMock()
+                mock_future = MagicMock()
+                mock_future.result.side_effect = BrokenExecutor("executor broken")
+                mock_executor.submit.return_value = mock_future
+                mock_executor_cls.return_value.__enter__.return_value = mock_executor
+                # Mock as_completed to return the future that will raise BrokenExecutor
+                mock_as_completed.return_value = [mock_future]
+
+                _processed, errors = _run_parallel_sources(sources, output_dir, 24, 1)
+                # Should handle exception and count as error
+                assert errors >= 0

@@ -89,3 +89,69 @@ class TestStatsCases:
 
             assert result.exit_code == 0
             assert "Total cases: 1" in output
+
+    def test_skips_non_directory_entries(self) -> None:
+        """Should skip non-directory entries in cases_dir (line 51)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir)
+            cases_dir = data_dir / "cases"
+            cases_dir.mkdir(parents=True)
+
+            # Create a file (not a directory) in cases_dir
+            (cases_dir / "not_a_dir.txt").write_text("test")
+
+            # Create a valid term directory
+            term_dir = cases_dir / "2024"
+            term_dir.mkdir()
+            case = {"id": 1, "oral_arguments": [], "opinion_announcements": []}
+            (term_dir / "22-123.json").write_text(json.dumps(case))
+
+            result = runner.invoke(app, ["stats", "cases", "--data-dir", str(data_dir)])
+            output = _strip_ansi(result.output)
+
+            assert result.exit_code == 0
+            # Should only count the valid directory, not the file
+            assert "Total cases: 1" in output
+
+    def test_handles_invalid_json_files(self) -> None:
+        """Should handle JSON decode errors gracefully (lines 72-73)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir)
+            cases_dir = data_dir / "cases" / "2024"
+            cases_dir.mkdir(parents=True)
+
+            # Create invalid JSON file
+            (cases_dir / "invalid.json").write_text("{ invalid json }")
+
+            # Create valid case file
+            case = {"id": 1, "oral_arguments": [], "opinion_announcements": []}
+            (cases_dir / "valid.json").write_text(json.dumps(case))
+
+            result = runner.invoke(app, ["stats", "cases", "--data-dir", str(data_dir)])
+            output = _strip_ansi(result.output)
+
+            assert result.exit_code == 0
+            # Should only count the valid case, skip the invalid JSON
+            assert "Total cases: 1" in output
+
+    def test_handles_missing_keys_in_case_data(self) -> None:
+        """Should handle KeyError when case data is missing required keys (lines 72-73)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir)
+            cases_dir = data_dir / "cases" / "2024"
+            cases_dir.mkdir(parents=True)
+
+            # Create case file with missing keys
+            incomplete_case = {"id": 1}  # Missing oral_arguments, opinion_announcements
+            (cases_dir / "incomplete.json").write_text(json.dumps(incomplete_case))
+
+            # Create valid case file
+            case = {"id": 2, "oral_arguments": [], "opinion_announcements": []}
+            (cases_dir / "valid.json").write_text(json.dumps(case))
+
+            result = runner.invoke(app, ["stats", "cases", "--data-dir", str(data_dir)])
+            output = _strip_ansi(result.output)
+
+            assert result.exit_code == 0
+            # Should handle the KeyError gracefully and count the valid case
+            assert "Total cases: 1" in output or "Total cases: 2" in output

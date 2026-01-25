@@ -11,6 +11,7 @@ from typer.testing import CliRunner
 
 from oyez_sa_asr.cli import app
 from oyez_sa_asr.scraper.parser_cases import extract_media_urls
+from oyez_sa_asr.scraper.parser_transcripts import build_transcript_to_case_map
 
 runner = CliRunner()
 
@@ -208,3 +209,104 @@ class TestScrapeTranscriptsCommand:
                 mock_fetcher.fetch_batch_adaptive.assert_called_once()
                 call_args = mock_fetcher.fetch_batch_adaptive.call_args[0][0]
                 assert len(call_args) == 2
+
+    def test_scrape_transcripts_on_progress_callback(self) -> None:
+        """Should call on_progress callback during fetching (lines 98-112)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cases_dir = Path(tmpdir) / "cases"
+            cache_dir = Path(tmpdir) / "cache"
+            term_dir = cases_dir / "2024"
+            term_dir.mkdir(parents=True)
+            case = {
+                "oral_arguments": [
+                    {"href": "https://example.com/oral/1", "unavailable": False}
+                ],
+                "opinion_announcements": [],
+            }
+            (term_dir / "22-123.json").write_text(json.dumps(case))
+
+            with patch(
+                "oyez_sa_asr.cli_scrape_transcripts.AdaptiveFetcher"
+            ) as mock_fetcher_cls:
+                mock_fetcher = mock_fetcher_cls.create.return_value
+                mock_fetcher.fetch_batch_adaptive = AsyncMock(return_value=[])
+
+                result = runner.invoke(
+                    app,
+                    [
+                        "scrape",
+                        "transcripts",
+                        "--cases-dir",
+                        str(cases_dir),
+                        "--cache-dir",
+                        str(cache_dir),
+                    ],
+                )
+
+                assert result.exit_code == 0
+                # Should have called fetch_batch_adaptive with on_progress
+                mock_fetcher.fetch_batch_adaptive.assert_called_once()
+                call_args = mock_fetcher.fetch_batch_adaptive.call_args
+                # on_progress is passed as second positional argument
+                assert len(call_args[0]) >= 2, (
+                    "on_progress should be passed as positional arg"
+                )
+                assert callable(call_args[0][1]), (
+                    "Second positional arg should be callable (on_progress)"
+                )
+                call_args[1] if len(call_args) > 1 else {}
+
+    def test_build_case_map_skips_non_directories(self) -> None:
+        """Should skip non-directory entries (lines 201, 203)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cases_dir = Path(tmpdir)
+            # Create a file (not a directory) in cases_dir
+            (cases_dir / "not_a_dir.txt").write_text("test")
+
+            # Create a valid term directory
+            term_dir = cases_dir / "2024"
+            term_dir.mkdir()
+            case = {
+                "term": "2024",
+                "docket_number": "22-123",
+                "oral_arguments": [
+                    {"id": 123, "href": "https://example.com/audio.mp3"}
+                ],
+                "opinion_announcements": [],
+            }
+            (term_dir / "22-123.json").write_text(json.dumps(case))
+
+            case_map = build_transcript_to_case_map(cases_dir)
+            # Should only extract from valid directories, skip non-directories
+            assert 123 in case_map
+            assert case_map[123] == ("2024", "22-123")
+
+    def test_build_case_map_handles_exceptions(self) -> None:
+        """Should handle JSONDecodeError, KeyError, TypeError (lines 221-222)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cases_dir = Path(tmpdir)
+            term_dir = cases_dir / "2024"
+            term_dir.mkdir()
+
+            # Create invalid JSON file
+            (term_dir / "invalid.json").write_text("{ invalid json }")
+
+            # Create file with missing keys
+            incomplete = {"id": 1}  # Missing term, docket_number
+            (term_dir / "incomplete.json").write_text(json.dumps(incomplete))
+
+            # Create valid case file
+            case = {
+                "term": "2024",
+                "docket_number": "22-123",
+                "oral_arguments": [
+                    {"id": 456, "href": "https://example.com/audio.mp3"}
+                ],
+                "opinion_announcements": [],
+            }
+            (term_dir / "valid.json").write_text(json.dumps(case))
+
+            case_map = build_transcript_to_case_map(cases_dir)
+            # Should handle exceptions gracefully and only extract from valid file
+            assert 456 in case_map
+            assert case_map[456] == ("2024", "22-123")

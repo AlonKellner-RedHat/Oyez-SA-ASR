@@ -9,6 +9,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from oyez_sa_asr.cli import app
+from oyez_sa_asr.cli_stats import _format_hours, _format_size
 
 runner = CliRunner()
 
@@ -103,3 +104,93 @@ class TestStatsAudioDisplay:
 
             assert result.exit_code == 0
             assert "Total recordings: 1" in output
+
+    def test_duration_with_string_value(self) -> None:
+        """Handle duration_sec as string value."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir)
+            audio_dir = data_dir / "audio" / "2024" / "22-123"
+            audio_dir.mkdir(parents=True)
+
+            # Create metadata with duration as string
+            meta = {
+                "duration": "3600.5",  # String instead of float
+                "sample_rate": 16000,
+                "channels": 1,
+                "source_format": "mp3",
+                "source_era": "digital",
+            }
+            (audio_dir / "rec.metadata.json").write_text(json.dumps(meta))
+            (audio_dir / "rec.flac").write_bytes(b"fake" * 1000)
+
+            result = runner.invoke(app, ["stats", "audio", "--data-dir", str(data_dir)])
+            output = _strip_ansi(result.output)
+
+            assert result.exit_code == 0
+            # Should handle string duration correctly
+            assert "Total recordings: 1" in output
+
+    def test_duration_with_invalid_string(self) -> None:
+        """Handle invalid string duration gracefully."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir)
+            audio_dir = data_dir / "audio" / "2024" / "22-123"
+            audio_dir.mkdir(parents=True)
+
+            # Create metadata with invalid duration string
+            meta = {
+                "duration": "not-a-number",
+                "sample_rate": 16000,
+                "channels": 1,
+                "source_format": "mp3",
+                "source_era": "digital",
+            }
+            (audio_dir / "rec.metadata.json").write_text(json.dumps(meta))
+            (audio_dir / "rec.flac").write_bytes(b"fake" * 1000)
+
+            result = runner.invoke(app, ["stats", "audio", "--data-dir", str(data_dir)])
+            output = _strip_ansi(result.output)
+
+            assert result.exit_code == 0
+            # Should skip invalid duration but still show stats
+            assert "Total recordings: 1" in output
+
+
+class TestHelperFunctions:
+    """Tests for helper functions in cli_stats."""
+
+    def test_format_size_bytes(self) -> None:
+        """Format small sizes in bytes."""
+        assert _format_size(0) == "0.0 B"
+        assert _format_size(512) == "512.0 B"
+        assert _format_size(1023) == "1023.0 B"
+
+    def test_format_size_kb(self) -> None:
+        """Format sizes in KB."""
+        assert _format_size(1024) == "1.0 KB"
+        assert _format_size(2048) == "2.0 KB"
+        assert _format_size(1024 * 1023) == "1023.0 KB"
+
+    def test_format_size_mb(self) -> None:
+        """Format sizes in MB."""
+        assert _format_size(1024 * 1024) == "1.0 MB"
+        assert _format_size(1024 * 1024 * 500) == "500.0 MB"
+
+    def test_format_size_large(self) -> None:
+        """Format large sizes."""
+        assert _format_size(1024 * 1024 * 1024) == "1.0 GB"
+        assert _format_size(1024 * 1024 * 1024 * 1024) == "1.0 TB"
+        # Test PB fallback
+        large_size = 1024 * 1024 * 1024 * 1024 * 1024
+        result = _format_size(large_size)
+        assert "PB" in result
+
+    def test_format_hours(self) -> None:
+        """Format seconds as hours."""
+        assert _format_hours(0) == "0.0"
+        assert _format_hours(3600) == "1.0"
+        assert _format_hours(7200) == "2.0"
+        assert _format_hours(1800) == "0.5"
+        # Test with comma formatting for large numbers
+        result = _format_hours(3600000)
+        assert "1,000.0" in result or "1000.0" in result

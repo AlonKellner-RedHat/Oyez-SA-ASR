@@ -68,6 +68,389 @@ class TestProcessIndex:
             assert result.exit_code == 0
             assert "No cached cases" in result.output
 
+    def test_process_index_with_force(self) -> None:
+        """Should regenerate index when --force is used."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            output = Path(tmpdir) / "index.json"
+
+            # Create existing output file
+            output.write_text('{"total_cases": 0, "cases": []}')
+
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "index",
+                    "--cache-dir",
+                    str(cache_dir),
+                    "--output",
+                    str(output),
+                    "--force",
+                ],
+            )
+
+            assert result.exit_code == 0
+            assert (
+                "Force mode" in result.output or "regenerating" in result.output.lower()
+            )
+
+    def test_process_index_with_valid_cache(self) -> None:
+        """Should process index when cache has valid data."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            output = Path(tmpdir) / "index.json"
+            # Create cache structure
+            (cache_dir / "api.oyez.org" / "raw").mkdir(parents=True)
+            # Create a minimal cache file
+            (cache_dir / "api.oyez.org" / "raw" / "page_0.json").write_text(
+                json.dumps([{"ID": 1, "name": "Test"}])
+            )
+
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "index",
+                    "--cache-dir",
+                    str(cache_dir),
+                    "--output",
+                    str(output),
+                ],
+            )
+
+            assert result.exit_code == 0
+            assert output.exists()
+            assert "Done" in result.output
+
+    def test_process_cases_with_list_data(self) -> None:
+        """Should skip files that are lists (not case objects)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            output_dir = Path(tmpdir) / "data"
+            raw_dir = cache_dir / "api.oyez.org" / "raw"
+            raw_dir.mkdir(parents=True)
+
+            # Create a file that's a list (should be skipped)
+            (raw_dir / "list_file.json").write_text(json.dumps([{"id": 1}]))
+            # Create a valid case file
+            case_data = {
+                "ID": 12345,
+                "name": "Test v. Case",
+                "docket_number": "21-476",
+                "term": "2022",
+                "href": "https://example.com/cases/2022/21-476",
+                "timeline": [],
+                "decisions": [],
+                "oral_argument_audio": [],
+                "opinion_announcement": [],
+            }
+            (raw_dir / "valid_case.json").write_text(json.dumps(case_data))
+
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "cases",
+                    "--cache-dir",
+                    str(cache_dir),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+            )
+
+            assert result.exit_code == 0
+            # Should process valid case, skip list file
+            assert (output_dir / "2022" / "21-476.json").exists()
+
+    def test_process_cases_with_errors(self) -> None:
+        """Should handle JSON decode errors gracefully."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            output_dir = Path(tmpdir) / "data"
+            raw_dir = cache_dir / "api.oyez.org" / "raw"
+            raw_dir.mkdir(parents=True)
+
+            # Create invalid JSON file
+            (raw_dir / "invalid.json").write_text("not valid json")
+            # Create valid case
+            case_data = {
+                "ID": 12345,
+                "name": "Test v. Case",
+                "docket_number": "21-476",
+                "term": "2022",
+                "href": "https://example.com/cases/2022/21-476",
+                "timeline": [],
+                "decisions": [],
+                "oral_argument_audio": [],
+                "opinion_announcement": [],
+            }
+            (raw_dir / "valid.json").write_text(json.dumps(case_data))
+
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "cases",
+                    "--cache-dir",
+                    str(cache_dir),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+            )
+
+            assert result.exit_code == 0
+            # Should process valid case, report error for invalid
+            assert (output_dir / "2022" / "21-476.json").exists()
+            assert "Warnings" in result.output or "errors" in result.output.lower()
+
+    def test_process_transcripts_with_list_data(self) -> None:
+        """Should skip transcript files that are lists."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            raw_dir = cache_dir / "api.oyez.org" / "raw"
+            raw_dir.mkdir(parents=True)
+
+            # Create a list file (should be skipped)
+            (raw_dir / "list_file.json").write_text(json.dumps([{"id": 1}]))
+            # Create valid transcript
+            transcript_data = {
+                "id": 25123,
+                "title": "Oral Argument",
+                "media_file": [],
+                "transcript": {"duration": 100.0, "sections": [{"turns": []}]},
+            }
+            (raw_dir / "valid.json").write_text(json.dumps(transcript_data))
+
+            cases_dir = Path(tmpdir) / "cases" / "2022"
+            cases_dir.mkdir(parents=True)
+            case_data = {
+                "docket_number": "21-476",
+                "term": "2022",
+                "oral_arguments": [{"id": 25123}],
+                "opinion_announcements": [],
+            }
+            (cases_dir / "21-476.json").write_text(json.dumps(case_data))
+
+            output_dir = Path(tmpdir) / "output"
+
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "transcripts",
+                    "--cache-dir",
+                    str(cache_dir),
+                    "--cases-dir",
+                    str(cases_dir.parent),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+            )
+
+            assert result.exit_code == 0
+            # Should process valid transcript, skip list file
+
+    def test_process_transcripts_with_missing_id(self) -> None:
+        """Should skip transcripts without id field."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            raw_dir = cache_dir / "api.oyez.org" / "raw"
+            raw_dir.mkdir(parents=True)
+
+            # Create transcript without id
+            transcript_data = {
+                "title": "Oral Argument",
+                "media_file": [],
+                "transcript": {"duration": 100.0, "sections": [{"turns": []}]},
+            }
+            (raw_dir / "no_id.json").write_text(json.dumps(transcript_data))
+
+            cases_dir = Path(tmpdir) / "cases"
+            output_dir = Path(tmpdir) / "output"
+
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "transcripts",
+                    "--cache-dir",
+                    str(cache_dir),
+                    "--cases-dir",
+                    str(cases_dir),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+            )
+
+            assert result.exit_code == 0
+            # Should skip transcript without id
+
+    def test_process_transcripts_with_errors(self) -> None:
+        """Should handle JSON decode errors gracefully."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            raw_dir = cache_dir / "api.oyez.org" / "raw"
+            raw_dir.mkdir(parents=True)
+
+            # Create invalid JSON
+            (raw_dir / "invalid.json").write_text("not valid json")
+            # Create valid transcript
+            transcript_data = {
+                "id": 25123,
+                "title": "Oral Argument",
+                "media_file": [],
+                "transcript": {"duration": 100.0, "sections": [{"turns": []}]},
+            }
+            (raw_dir / "valid.json").write_text(json.dumps(transcript_data))
+
+            cases_dir = Path(tmpdir) / "cases" / "2022"
+            cases_dir.mkdir(parents=True)
+            case_data = {
+                "docket_number": "21-476",
+                "term": "2022",
+                "oral_arguments": [{"id": 25123}],
+                "opinion_announcements": [],
+            }
+            (cases_dir / "21-476.json").write_text(json.dumps(case_data))
+
+            output_dir = Path(tmpdir) / "output"
+
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "transcripts",
+                    "--cache-dir",
+                    str(cache_dir),
+                    "--cases-dir",
+                    str(cases_dir.parent),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+            )
+
+            assert result.exit_code == 0
+            assert "Warnings" in result.output or "errors" in result.output.lower()
+
+    def test_process_cases_empty_raw_files(self) -> None:
+        """Should handle case when raw_files list is empty."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            output_dir = Path(tmpdir) / "data"
+            raw_dir = cache_dir / "api.oyez.org" / "raw"
+            raw_dir.mkdir(parents=True)
+            # Don't create any files
+
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "cases",
+                    "--cache-dir",
+                    str(cache_dir),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+            )
+
+            assert result.exit_code == 0
+            assert "No cached cases" in result.output
+
+    def test_process_transcripts_empty_raw_files(self) -> None:
+        """Should handle case when raw_files list is empty."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            raw_dir = cache_dir / "api.oyez.org" / "raw"
+            raw_dir.mkdir(parents=True)
+            # Don't create any files
+
+            cases_dir = Path(tmpdir) / "cases"
+            output_dir = Path(tmpdir) / "output"
+
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "transcripts",
+                    "--cache-dir",
+                    str(cache_dir),
+                    "--cases-dir",
+                    str(cases_dir),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+            )
+
+            assert result.exit_code == 0
+            assert "No cached transcripts" in result.output
+
+    def test_process_transcripts_with_terms_display(self) -> None:
+        """Should display terms when provided."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            raw_dir = cache_dir / "api.oyez.org" / "raw"
+            raw_dir.mkdir(parents=True)
+
+            cases_dir = Path(tmpdir) / "cases"
+            output_dir = Path(tmpdir) / "output"
+
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "transcripts",
+                    "--cache-dir",
+                    str(cache_dir),
+                    "--cases-dir",
+                    str(cases_dir),
+                    "--output-dir",
+                    str(output_dir),
+                    "--term",
+                    "2022",
+                ],
+            )
+
+            assert result.exit_code == 0
+            assert "2022" in result.output
+
+    def test_process_transcripts_skipped_no_case_display(self) -> None:
+        """Should display skipped count when transcripts have no case mapping."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            raw_dir = cache_dir / "api.oyez.org" / "raw"
+            raw_dir.mkdir(parents=True)
+
+            # Create transcript without matching case
+            transcript_data = {
+                "id": 99999,  # No matching case
+                "title": "Oral Argument",
+                "media_file": [],
+                "transcript": {"duration": 100.0, "sections": [{"turns": []}]},
+            }
+            (raw_dir / "no_case.json").write_text(json.dumps(transcript_data))
+
+            cases_dir = Path(tmpdir) / "cases"
+            output_dir = Path(tmpdir) / "output"
+
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "transcripts",
+                    "--cache-dir",
+                    str(cache_dir),
+                    "--cases-dir",
+                    str(cases_dir),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+            )
+
+            assert result.exit_code == 0
+            output = strip_ansi(result.output)
+            assert "Skipped (no case mapping)" in output
+
 
 class TestProcessTranscripts:
     """Tests for process transcripts command."""
@@ -254,3 +637,114 @@ class TestProcessCases:
             assert result.exit_code == 0
             assert (output_dir / "2022" / "21-476.json").exists()
             assert not (output_dir / "2021").exists()
+
+    def test_process_cases_with_force(self) -> None:
+        """Should reprocess existing files when --force is used."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            output_dir = Path(tmpdir) / "data"
+            raw_dir = cache_dir / "api.oyez.org" / "raw"
+            raw_dir.mkdir(parents=True)
+
+            case_data = {
+                "ID": 12345,
+                "name": "Test v. Case",
+                "docket_number": "21-476",
+                "term": "2022",
+                "href": "https://example.com/cases/2022/21-476",
+                "timeline": [],
+                "decisions": [],
+                "oral_argument_audio": [],
+                "opinion_announcement": [],
+            }
+            (raw_dir / "abc123.json").write_text(json.dumps(case_data))
+
+            # Process once
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "cases",
+                    "--cache-dir",
+                    str(cache_dir),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+            )
+            assert result.exit_code == 0
+            expected_file = output_dir / "2022" / "21-476.json"
+            assert expected_file.exists()
+            original_mtime = expected_file.stat().st_mtime
+
+            # Process again with --force
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "cases",
+                    "--cache-dir",
+                    str(cache_dir),
+                    "--output-dir",
+                    str(output_dir),
+                    "--force",
+                ],
+            )
+            assert result.exit_code == 0
+            # File should be reprocessed (newer mtime)
+            assert expected_file.stat().st_mtime >= original_mtime
+            assert (
+                "Force mode" in result.output or "reprocessing" in result.output.lower()
+            )
+
+    def test_process_cases_skips_existing(self) -> None:
+        """Should skip existing files when --force is not used."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            output_dir = Path(tmpdir) / "data"
+            raw_dir = cache_dir / "api.oyez.org" / "raw"
+            raw_dir.mkdir(parents=True)
+
+            case_data = {
+                "ID": 12345,
+                "name": "Test v. Case",
+                "docket_number": "21-476",
+                "term": "2022",
+                "href": "https://example.com/cases/2022/21-476",
+                "timeline": [],
+                "decisions": [],
+                "oral_argument_audio": [],
+                "opinion_announcement": [],
+            }
+            (raw_dir / "abc123.json").write_text(json.dumps(case_data))
+
+            # Process once
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "cases",
+                    "--cache-dir",
+                    str(cache_dir),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+            )
+            assert result.exit_code == 0
+            expected_file = output_dir / "2022" / "21-476.json"
+            assert expected_file.exists()
+
+            # Process again without --force
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "cases",
+                    "--cache-dir",
+                    str(cache_dir),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+            )
+            assert result.exit_code == 0
+            output = strip_ansi(result.output)
+            assert "Skipped (existing)" in output

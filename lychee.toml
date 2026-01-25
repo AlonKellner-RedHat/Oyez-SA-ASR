@@ -31,6 +31,9 @@ exclude = [
   'f".*"',
   # Template URLs with placeholders (e.g., {repo_id})
   'huggingface\.co/datasets/%7B',
+  # Test URLs (used in test code, not real links)
+  '^https://test\.com',
+  '^https://test\.',
 ]
 exclude_path = [
   "uv.lock",

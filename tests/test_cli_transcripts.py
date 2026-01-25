@@ -118,3 +118,135 @@ class TestProcessTranscriptsCommand:
             assert result.exit_code == 0
             expected_file = output_dir / "2022" / "21-476" / "oral_argument.json"
             assert expected_file.exists()
+
+    def test_process_transcripts_with_force(self) -> None:
+        """Should reprocess existing files when --force is used."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            raw_dir = cache_dir / "api.oyez.org" / "raw"
+            raw_dir.mkdir(parents=True)
+
+            transcript_data = {
+                "id": 25123,
+                "title": "Oral Argument",
+                "media_file": [],
+                "transcript": {
+                    "duration": 100.0,
+                    "sections": [{"turns": []}],
+                },
+            }
+            (raw_dir / "abc123.json").write_text(json.dumps(transcript_data))
+
+            cases_dir = Path(tmpdir) / "cases" / "2022"
+            cases_dir.mkdir(parents=True)
+            case_data = {
+                "docket_number": "21-476",
+                "term": "2022",
+                "oral_arguments": [{"id": 25123}],
+                "opinion_announcements": [],
+            }
+            (cases_dir / "21-476.json").write_text(json.dumps(case_data))
+
+            output_dir = Path(tmpdir) / "output"
+
+            # Process once
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "transcripts",
+                    "--cache-dir",
+                    str(cache_dir),
+                    "--cases-dir",
+                    str(cases_dir.parent),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+            )
+            assert result.exit_code == 0
+            expected_file = output_dir / "2022" / "21-476" / "oral_argument.json"
+            assert expected_file.exists()
+
+            # Process again with --force
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "transcripts",
+                    "--cache-dir",
+                    str(cache_dir),
+                    "--cases-dir",
+                    str(cases_dir.parent),
+                    "--output-dir",
+                    str(output_dir),
+                    "--force",
+                ],
+            )
+            assert result.exit_code == 0
+            assert (
+                "Force mode" in result.output or "reprocessing" in result.output.lower()
+            )
+
+    def test_process_transcripts_skips_existing(self) -> None:
+        """Should skip existing files when --force is not used."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir) / "cache"
+            raw_dir = cache_dir / "api.oyez.org" / "raw"
+            raw_dir.mkdir(parents=True)
+
+            transcript_data = {
+                "id": 25123,
+                "title": "Oral Argument",
+                "media_file": [],
+                "transcript": {
+                    "duration": 100.0,
+                    "sections": [{"turns": []}],
+                },
+            }
+            (raw_dir / "abc123.json").write_text(json.dumps(transcript_data))
+
+            cases_dir = Path(tmpdir) / "cases" / "2022"
+            cases_dir.mkdir(parents=True)
+            case_data = {
+                "docket_number": "21-476",
+                "term": "2022",
+                "oral_arguments": [{"id": 25123}],
+                "opinion_announcements": [],
+            }
+            (cases_dir / "21-476.json").write_text(json.dumps(case_data))
+
+            output_dir = Path(tmpdir) / "output"
+
+            # Process once
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "transcripts",
+                    "--cache-dir",
+                    str(cache_dir),
+                    "--cases-dir",
+                    str(cases_dir.parent),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+            )
+            assert result.exit_code == 0
+
+            # Process again without --force
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "transcripts",
+                    "--cache-dir",
+                    str(cache_dir),
+                    "--cases-dir",
+                    str(cases_dir.parent),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+            )
+            assert result.exit_code == 0
+            output = strip_ansi(result.output)
+            assert "Skipped (existing)" in output

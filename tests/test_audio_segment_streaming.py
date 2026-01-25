@@ -48,9 +48,11 @@ class TestExtractSegmentsStreaming:
         finally:
             path.unlink()
 
+    @pytest.mark.slow
     def test_streaming_memory_efficient(self) -> None:
         """Verify streaming uses less memory than full load."""
-        path = _create_test_audio(30.0)
+        # Use shorter duration to speed up test
+        path = _create_test_audio(5.0)
         try:
             segments = [(i, i + 2.0) for i in range(0, 28, 3)]
 

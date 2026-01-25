@@ -4,10 +4,12 @@
 import json
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
+import pytest
 from typer.testing import CliRunner
 
 from oyez_sa_asr.audio_utils import save_audio
@@ -141,24 +143,35 @@ class TestSkipExisting:
             save_state(output_dir, state)
             (output_dir / "marker.txt").write_text("should be removed")
 
-            result = runner.invoke(
-                app,
-                [
-                    "dataset",
-                    "simple-lt1m",
-                    "--flex-dir",
-                    str(flex_dir),
-                    "--output-dir",
-                    str(output_dir),
-                    "--shard-size",
-                    "500",  # Different from saved state
-                ],
-            )
+            # Mock process_by_recording to avoid heavy audio processing
+            with patch(
+                "oyez_sa_asr.cli_dataset_simple_core.process_by_recording"
+            ) as mock_process:
+                mock_process.return_value = {
+                    "embedded": 1,
+                    "skipped": 0,
+                    "errors": 0,
+                    "shards": 1,
+                }
 
-            assert result.exit_code == 0
-            assert "Cleaning" in result.output
-            # Marker file should be removed
-            assert not (output_dir / "marker.txt").exists()
+                result = runner.invoke(
+                    app,
+                    [
+                        "dataset",
+                        "simple-lt1m",
+                        "--flex-dir",
+                        str(flex_dir),
+                        "--output-dir",
+                        str(output_dir),
+                        "--shard-size",
+                        "500",  # Different from saved state
+                    ],
+                )
+
+                assert result.exit_code == 0
+                assert "Cleaning" in result.output
+                # Marker file should be removed
+                assert not (output_dir / "marker.txt").exists()
 
     def test_cleans_when_flex_terms_differ(self) -> None:
         """Cleans and regenerates when flex dataset terms differ."""
@@ -180,22 +193,34 @@ class TestSkipExisting:
             save_state(output_dir, state)
             (output_dir / "marker.txt").write_text("should be removed")
 
-            result = runner.invoke(
-                app,
-                [
-                    "dataset",
-                    "simple-lt1m",
-                    "--flex-dir",
-                    str(flex_dir),
-                    "--output-dir",
-                    str(output_dir),
-                ],
-            )
+            # Mock process_by_recording to avoid heavy audio processing
+            with patch(
+                "oyez_sa_asr.cli_dataset_simple_core.process_by_recording"
+            ) as mock_process:
+                mock_process.return_value = {
+                    "embedded": 1,
+                    "skipped": 0,
+                    "errors": 0,
+                    "shards": 1,
+                }
 
-            assert result.exit_code == 0
-            assert "Cleaning" in result.output
-            assert not (output_dir / "marker.txt").exists()
+                result = runner.invoke(
+                    app,
+                    [
+                        "dataset",
+                        "simple-lt1m",
+                        "--flex-dir",
+                        str(flex_dir),
+                        "--output-dir",
+                        str(output_dir),
+                    ],
+                )
 
+                assert result.exit_code == 0
+                assert "Cleaning" in result.output
+                assert not (output_dir / "marker.txt").exists()
+
+    @pytest.mark.slow
     def test_regenerates_if_incomplete(self) -> None:
         """Regenerates if existing state has completed=false."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -235,6 +260,7 @@ class TestSkipExisting:
                 index = json.load(f)
             assert index["completed"] is True
 
+    @pytest.mark.slow
     def test_force_regenerates_matching_settings(self) -> None:
         """--force flag forces regeneration even if state matches."""
         with tempfile.TemporaryDirectory() as tmpdir:

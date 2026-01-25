@@ -5,10 +5,18 @@ import json
 import re
 import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from typer.testing import CliRunner
 
 from oyez_sa_asr.cli import app
+from oyez_sa_asr.cli_process_speakers import (
+    _load_case_names,
+    _process_transcript_file,
+)
+
+if TYPE_CHECKING:
+    from oyez_sa_asr.speaker_models import SpeakerProfile
 
 runner = CliRunner()
 
@@ -278,3 +286,319 @@ class TestProcessSpeakersTermFilter:
 
             assert "2024" in smith_data["by_term"]
             assert "2023" not in smith_data["by_term"]
+
+    def test_process_speakers_with_force(self) -> None:
+        """Should regenerate speaker files when --force is used."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir)
+            transcripts_dir = data_dir / "transcripts" / "2024" / "23-1234"
+            transcripts_dir.mkdir(parents=True)
+            transcript = _create_transcript("2024", "23-1234")
+            (transcripts_dir / "oral_argument.json").write_text(json.dumps(transcript))
+
+            cases_dir = data_dir / "cases" / "2024"
+            cases_dir.mkdir(parents=True)
+            case = _create_case("2024", "23-1234")
+            (cases_dir / "23-1234.json").write_text(json.dumps(case))
+
+            output_dir = data_dir / "speakers"
+
+            # Process once
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "speakers",
+                    "--transcripts-dir",
+                    str(data_dir / "transcripts"),
+                    "--cases-dir",
+                    str(data_dir / "cases"),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+            )
+            assert result.exit_code == 0
+            smith_file = output_dir / "other" / "123_justice_smith.json"
+            assert smith_file.exists()
+
+            # Process again with --force
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "speakers",
+                    "--transcripts-dir",
+                    str(data_dir / "transcripts"),
+                    "--cases-dir",
+                    str(data_dir / "cases"),
+                    "--output-dir",
+                    str(output_dir),
+                    "--force",
+                ],
+            )
+            assert result.exit_code == 0
+            assert (
+                "Force mode" in result.output or "regenerating" in result.output.lower()
+            )
+
+    def test_process_speakers_skips_existing(self) -> None:
+        """Should skip existing files when --force is not used."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir)
+            transcripts_dir = data_dir / "transcripts" / "2024" / "23-1234"
+            transcripts_dir.mkdir(parents=True)
+            transcript = _create_transcript("2024", "23-1234")
+            (transcripts_dir / "oral_argument.json").write_text(json.dumps(transcript))
+
+            cases_dir = data_dir / "cases" / "2024"
+            cases_dir.mkdir(parents=True)
+            case = _create_case("2024", "23-1234")
+            (cases_dir / "23-1234.json").write_text(json.dumps(case))
+
+            output_dir = data_dir / "speakers"
+
+            # Process once
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "speakers",
+                    "--transcripts-dir",
+                    str(data_dir / "transcripts"),
+                    "--cases-dir",
+                    str(data_dir / "cases"),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+            )
+            assert result.exit_code == 0
+
+            # Process again without --force
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "speakers",
+                    "--transcripts-dir",
+                    str(data_dir / "transcripts"),
+                    "--cases-dir",
+                    str(data_dir / "cases"),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+            )
+            assert result.exit_code == 0
+            output = _strip_ansi(result.output)
+            assert "Skipped (existing)" in output
+
+    def test_process_speakers_no_transcripts(self) -> None:
+        """Should handle case when no transcripts are found."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir)
+            transcripts_dir = data_dir / "transcripts"
+            transcripts_dir.mkdir(parents=True)
+            # Create empty term directory
+            (transcripts_dir / "2024").mkdir()
+
+            cases_dir = data_dir / "cases"
+            output_dir = data_dir / "speakers"
+
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "speakers",
+                    "--transcripts-dir",
+                    str(transcripts_dir),
+                    "--cases-dir",
+                    str(cases_dir),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+            )
+
+            assert result.exit_code == 0
+            assert "No transcripts found" in result.output
+
+    def test_process_speakers_invalid_json(self) -> None:
+        """Should handle invalid JSON in transcript files."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir)
+            transcripts_dir = data_dir / "transcripts" / "2024" / "23-1234"
+            transcripts_dir.mkdir(parents=True)
+            # Create invalid JSON file
+            (transcripts_dir / "oral_argument.json").write_text("invalid json")
+
+            cases_dir = data_dir / "cases"
+            output_dir = data_dir / "speakers"
+
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "speakers",
+                    "--transcripts-dir",
+                    str(data_dir / "transcripts"),
+                    "--cases-dir",
+                    str(cases_dir),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+            )
+
+            assert result.exit_code == 0
+            # Should handle error gracefully
+            assert (
+                "processed" in result.output.lower() or "done" in result.output.lower()
+            )
+
+    def test_load_case_names_skips_non_directories(self) -> None:
+        """Should skip non-directory entries (lines 32, 42-43)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cases_dir = Path(tmpdir)
+            # Create a file (not a directory) in cases_dir
+            (cases_dir / "not_a_dir.txt").write_text("test")
+
+            # Create a valid term directory
+            term_dir = cases_dir / "2024"
+            term_dir.mkdir()
+            case = {"term": "2024", "docket_number": "22-123", "name": "Test Case"}
+            (term_dir / "22-123.json").write_text(json.dumps(case))
+
+            case_names = _load_case_names(cases_dir, None)
+            # Should only extract from valid directories, skip non-directories
+            assert "2024/22-123" in case_names
+            assert case_names["2024/22-123"] == "Test Case"
+
+    def test_load_case_names_handles_exceptions(self) -> None:
+        """Should handle JSONDecodeError, KeyError (line 42-43)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cases_dir = Path(tmpdir)
+            term_dir = cases_dir / "2024"
+            term_dir.mkdir()
+
+            # Create invalid JSON file
+            (term_dir / "invalid.json").write_text("{ invalid json }")
+
+            # Create file with missing keys
+            incomplete = {"id": 1}  # Missing term, docket_number, name
+            (term_dir / "incomplete.json").write_text(json.dumps(incomplete))
+
+            # Create valid case file
+            case = {"term": "2024", "docket_number": "22-123", "name": "Test Case"}
+            (term_dir / "valid.json").write_text(json.dumps(case))
+
+            case_names = _load_case_names(cases_dir, None)
+            # Should handle exceptions gracefully and only extract from valid file
+            assert "2024/22-123" in case_names
+
+    def test_process_transcript_file_skips_invalid_turns(self) -> None:
+        """Should skip invalid turns (lines 74, 78)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            transcript_file = Path(tmpdir) / "transcript.json"
+            transcript = {
+                "term": "2024",
+                "case_docket": "22-123",
+                "turns": [
+                    {"is_valid": False, "speaker_id": 123},  # Invalid - should skip
+                    {"is_valid": True, "speaker_id": 456},  # Valid
+                    {"is_valid": True},  # No speaker_id - should skip
+                ],
+            }
+            transcript_file.write_text(json.dumps(transcript))
+
+            speakers: dict[int, SpeakerProfile] = {}
+            case_names = {"2024/22-123": "Test Case"}
+
+            count = _process_transcript_file(transcript_file, speakers, case_names)
+            # Should only process the valid turn
+            assert count == 1
+            assert 456 in speakers
+            assert 123 not in speakers
+
+    def test_process_speakers_skips_non_directories(self) -> None:
+        """Should skip non-directory entries (lines 173, 176)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir)
+            transcripts_dir = data_dir / "transcripts"
+            cases_dir = data_dir / "cases"
+            output_dir = data_dir / "speakers"
+
+            # Create transcripts_dir first, then a file (not a directory) in it
+            transcripts_dir.mkdir(parents=True)
+            (transcripts_dir / "not_a_dir.txt").write_text("test")
+
+            # Create a valid term directory with a file (not a directory) inside
+            term_dir = transcripts_dir / "2024"
+            term_dir.mkdir()
+            (term_dir / "not_a_dir.json").write_text("test")
+
+            # Create a valid docket directory
+            docket_dir = term_dir / "22-123"
+            docket_dir.mkdir()
+            transcript = _create_transcript("2024", "22-123")
+            (docket_dir / "transcript.json").write_text(json.dumps(transcript))
+
+            cases_dir.mkdir()
+            case_dir = cases_dir / "2024"
+            case_dir.mkdir()
+            case = _create_case("2024", "22-123")
+            (case_dir / "22-123.json").write_text(json.dumps(case))
+
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "speakers",
+                    "--transcripts-dir",
+                    str(transcripts_dir),
+                    "--cases-dir",
+                    str(cases_dir),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+            )
+
+            assert result.exit_code == 0
+            # Should only process valid directories, skip non-directories
+
+    def test_process_speakers_skips_existing_in_other_subdir(self) -> None:
+        """Should skip existing files in other subdirectory (lines 221-222)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir)
+            transcripts_dir = data_dir / "transcripts" / "2024" / "23-1234"
+            transcripts_dir.mkdir(parents=True)
+            transcript = _create_transcript("2024", "23-1234")
+            (transcripts_dir / "oral_argument.json").write_text(json.dumps(transcript))
+
+            cases_dir = data_dir / "cases" / "2024"
+            cases_dir.mkdir(parents=True)
+            case = _create_case("2024", "23-1234")
+            (cases_dir / "23-1234.json").write_text(json.dumps(case))
+
+            output_dir = data_dir / "speakers"
+            other_dir = output_dir / "other"
+            other_dir.mkdir(parents=True)
+
+            # Create existing file in other/ directory
+            existing_file = other_dir / "123_justice_smith.json"
+            existing_file.write_text('{"id": 123, "name": "Justice Smith"}')
+
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "speakers",
+                    "--transcripts-dir",
+                    str(data_dir / "transcripts"),
+                    "--cases-dir",
+                    str(cases_dir),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+            )
+
+            assert result.exit_code == 0
+            output = _strip_ansi(result.output)
+            # Should skip existing file
+            assert "Skipped" in output or "skipped" in output.lower()

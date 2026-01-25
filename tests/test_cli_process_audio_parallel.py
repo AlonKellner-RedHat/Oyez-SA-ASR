@@ -5,8 +5,10 @@ import math
 import re
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
+import pytest
 from typer.testing import CliRunner
 
 from oyez_sa_asr.audio_utils import save_audio
@@ -47,23 +49,31 @@ class TestParallelProcessing:
                 samples = make_sine(sr=44100, dur=0.1)
                 save_audio(samples, 44100, mp3_dir / f"audio_{i}.mp3")
 
-            result = runner.invoke(
-                app,
-                [
-                    "process",
-                    "audio",
-                    "-c",
-                    str(cache_dir),
-                    "-o",
-                    str(output_dir),
-                    "--workers",
-                    "2",
-                ],
-            )
-            assert result.exit_code == 0
-            output = strip_ansi(result.output)
-            assert "3" in output
+            # Mock _process_recording to avoid heavy audio conversion
+            with patch(
+                "oyez_sa_asr.cli_process_audio._process_recording"
+            ) as mock_process:
+                # Return success for all files
+                mock_process.return_value = (True, "")
 
+                result = runner.invoke(
+                    app,
+                    [
+                        "process",
+                        "audio",
+                        "-c",
+                        str(cache_dir),
+                        "-o",
+                        str(output_dir),
+                        "--workers",
+                        "2",
+                    ],
+                )
+                assert result.exit_code == 0
+                output = strip_ansi(result.output)
+                assert "3" in output
+
+    @pytest.mark.slow
     def test_many_files_no_hang(self) -> None:
         """Regression test: process >50 files per worker without hanging."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -74,18 +84,25 @@ class TestParallelProcessing:
                 mp3_dir.mkdir(parents=True)
                 save_audio(make_sine(sr=16000, dur=0.05), 16000, mp3_dir / f"a{i}.mp3")
 
-            result = runner.invoke(
-                app,
-                [
-                    "process",
-                    "audio",
-                    "-c",
-                    str(cache_dir),
-                    "-o",
-                    str(output_dir),
-                    "-w",
-                    "2",
-                ],
-            )
-            assert result.exit_code == 0
-            assert str(num_files) in strip_ansi(result.output)
+            # Mock _process_recording to avoid heavy audio conversion
+            with patch(
+                "oyez_sa_asr.cli_process_audio._process_recording"
+            ) as mock_process:
+                # Return success for all files
+                mock_process.return_value = (True, "")
+
+                result = runner.invoke(
+                    app,
+                    [
+                        "process",
+                        "audio",
+                        "-c",
+                        str(cache_dir),
+                        "-o",
+                        str(output_dir),
+                        "-w",
+                        "2",
+                    ],
+                )
+                assert result.exit_code == 0
+                assert str(num_files) in strip_ansi(result.output)

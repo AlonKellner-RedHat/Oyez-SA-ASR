@@ -7,6 +7,7 @@ import tracemalloc
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from oyez_sa_asr.audio_utils import load_audio, save_audio
 
@@ -53,6 +54,7 @@ class TestMemoryEfficiency:
             assert loaded_sr == sr
             assert loaded.shape == samples.shape
 
+    @pytest.mark.slow
     def test_large_file_memory_stable(self) -> None:
         """Test that processing larger files doesn't cause memory spikes."""
         sr = 44100

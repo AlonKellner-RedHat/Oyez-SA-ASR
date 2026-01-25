@@ -110,6 +110,39 @@ class TestAudioReference:
         assert ref.type == "dissent"
         assert ref.speaker == "Sotomayor"
 
+    def test_to_dict(self) -> None:
+        """Test to_dict method (line 76)."""
+        ref = AudioReference(
+            id=123,
+            title="Test Title",
+            href="https://example.com/test",
+            unavailable=False,
+            type="oral_argument",
+            speaker=None,
+        )
+        result = ref.to_dict()
+        assert result == {
+            "id": 123,
+            "title": "Test Title",
+            "href": "https://example.com/test",
+            "unavailable": False,
+            "type": "oral_argument",
+            "speaker": None,
+        }
+
+    def test_to_dict_with_speaker(self) -> None:
+        """Test to_dict with speaker."""
+        ref = AudioReference(
+            id=456,
+            title="Dissenting Opinion - Sotomayor",
+            href="https://example.com/dissent",
+            unavailable=False,
+            type="dissent",
+            speaker="Sotomayor",
+        )
+        result = ref.to_dict()
+        assert result["speaker"] == "Sotomayor"
+
 
 class TestDecision:
     """Tests for Decision dataclass."""
