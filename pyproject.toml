@@ -57,6 +57,9 @@ package = true
 python-preference = "only-managed"
 link-mode = "copy"
 
+[tool.typos.files]
+extend-exclude = [ "**/.env.*" ]
+
 [tool.pytest.ini_options]
 pythonpath = "./src"
 markers = [
@@ -115,9 +118,6 @@ exclude = [
   "tests/test_term_parser.py",
   "tests/test_worker_pool.py",
 ]
-
-[tool.typos.files]
-extend-exclude = [ "**/.env.*" ]
 
 [tool.claude-pre-commit]
 exclude-files = [ "lcov.info" ]
