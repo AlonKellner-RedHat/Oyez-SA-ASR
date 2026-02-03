@@ -254,8 +254,8 @@ class TestProcessedTranscript:
         assert data["url_date"] == "1978-04-25"
         assert data["date_mismatch"] is True
 
-    def test_to_dict_date_fields_none_when_unparsable(self) -> None:
-        """title_date and url_date are null when unparsable; date_mismatch False."""
+    def test_to_dict_date_fields_none_when_unparseable(self) -> None:
+        """title_date and url_date are null when unparseable; date_mismatch False."""
         raw = _raw([])
         raw["id"] = 1
         raw["title"] = "Wisconsin v. Yoder - Life of the Law"

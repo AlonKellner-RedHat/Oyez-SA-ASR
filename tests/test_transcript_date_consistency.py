@@ -47,7 +47,7 @@ def _collect_inconsistencies(transcripts_dir: Path) -> list[dict]:
             inconsistencies.append(
                 {
                     "path": str(path),
-                    "error": "title date unparsable",
+                    "error": "title date unparseable",
                     "url_date": url_date,
                     "title_date": None,
                     "title": title,
@@ -97,6 +97,6 @@ def test_url_date_consistent_with_title() -> None:
     inconsistencies = _collect_inconsistencies(transcripts_dir)
     assert not inconsistencies, (
         f"Found {len(inconsistencies)} transcript(s) where URL date and title date "
-        "differ or title is unparsable."
+        "differ or title is unparseable."
         + _format_inconsistencies_report(inconsistencies)
     )

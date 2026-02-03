@@ -57,6 +57,10 @@ package = true
 python-preference = "only-managed"
 link-mode = "copy"
 
+[tool.typos.default.extend-words]
+# Correct spelling (typos otherwise "corrects" to unparsable)
+unparseable = "unparseable"
+
 [tool.typos.files]
 extend-exclude = [ "**/.env.*" ]
 

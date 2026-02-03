@@ -142,7 +142,7 @@ def parse_date_from_title(title: str) -> tuple[int, int, int] | None:
     """Parse (year, month, day) from transcript title.
 
     Expects format like "Oral Argument - December 01, 2021" or
-    "Opinion Announcement - May 20, 1996". Returns None if unparsable.
+    "Opinion Announcement - May 20, 1996". Returns None if unparseable.
     """
     if not title or not isinstance(title, str):
         return None
