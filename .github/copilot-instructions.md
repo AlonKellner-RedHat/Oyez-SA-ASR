@@ -42,6 +42,8 @@ Commit messages must follow the conventional commits standard like so:
 Assisted-by: `<name-of-code-assistant>`  
 ```
 
+Never use `git commit --no-verify`; fix hooks or repo issues instead.
+
 ## Just Pre-Commit
 
 Run checks via `just p` (changed files) or `just pa` (all files).
