@@ -7,7 +7,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from oyez_sa_asr.audio_source import (
+    extract_transcript_date,
+    parse_date_from_title,
+)
+
 from .parser_transcripts import ProcessedTurn, parse_transcript_type
+
+
+def _format_iso_date(t: tuple[int, int, int]) -> str:
+    """Format (year, month, day) as YYYY-MM-DD."""
+    y, m, d = t
+    return f"{y}-{m:02d}-{d:02d}"
 
 
 def _extract_audio_urls(media_files: list[dict[str, Any]] | None) -> dict[str, str]:
@@ -132,6 +143,21 @@ class ProcessedTranscript:
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
+        transcript_dict = {
+            "metadata": self.metadata,
+            "title": self.title,
+        }
+        url_date_t = extract_transcript_date(transcript_dict)
+        title_date_t = parse_date_from_title(self.title)
+        url_date: str | None = _format_iso_date(url_date_t) if url_date_t else None
+        title_date: str | None = (
+            _format_iso_date(title_date_t) if title_date_t else None
+        )
+        date_mismatch = (
+            url_date_t is not None
+            and title_date_t is not None
+            and url_date_t != title_date_t
+        )
         return {
             "id": self.id,
             "case_docket": self.case_docket,
@@ -139,6 +165,9 @@ class ProcessedTranscript:
             "type": self.type,
             "speaker": self.speaker,
             "title": self.title,
+            "title_date": title_date,
+            "url_date": url_date,
+            "date_mismatch": date_mismatch,
             "metadata": self.metadata,
             "turns": [t.to_dict() for t in self.turns],
         }

@@ -215,3 +215,55 @@ class TestProcessedTranscript:
         )
         assert t.turns[1].is_valid is True  # 20/80=25%
         assert t.metadata["invalid_turn_count"] == 1
+
+    def test_to_dict_includes_title_date_url_date_date_mismatch(self) -> None:
+        """to_dict includes title_date, url_date, date_mismatch from process transcripts."""
+        raw = {
+            "id": 25123,
+            "title": "Oral Argument - December 05, 2022",
+            "media_file": [
+                {
+                    "mime": "audio/mpeg",
+                    "href": "https://s3.../21-476_20221205-argument.delivery.mp3",
+                },
+            ],
+            "transcript": {"duration": 0.0, "sections": [{"turns": []}]},
+        }
+        t = ProcessedTranscript.from_raw(raw, "2022", "21-476")
+        data = t.to_dict()
+        assert data["title_date"] == "2022-12-05"
+        assert data["url_date"] == "2022-12-05"
+        assert data["date_mismatch"] is False
+
+    def test_to_dict_date_mismatch_true_when_differ(self) -> None:
+        """date_mismatch is True when url_date and title_date differ."""
+        raw = {
+            "id": 1,
+            "title": "Oral Argument - April 26, 1978",
+            "media_file": [
+                {
+                    "mime": "audio/mpeg",
+                    "href": "https://s3.../77-529_19780425-argument.delivery.mp3",
+                },
+            ],
+            "transcript": {"duration": 0.0, "sections": [{"turns": []}]},
+        }
+        t = ProcessedTranscript.from_raw(raw, "1977", "77-529")
+        data = t.to_dict()
+        assert data["title_date"] == "1978-04-26"
+        assert data["url_date"] == "1978-04-25"
+        assert data["date_mismatch"] is True
+
+    def test_to_dict_date_fields_none_when_unparsable(self) -> None:
+        """title_date and url_date are null when unparsable; date_mismatch False."""
+        raw = _raw([])
+        raw["id"] = 1
+        raw["title"] = "Wisconsin v. Yoder - Life of the Law"
+        raw["media_file"] = [
+            {"mime": "audio/mpeg", "href": "https://s3.../19711208a_70-110.ogg"},
+        ]
+        t = ProcessedTranscript.from_raw(raw, "1971", "70-110")
+        data = t.to_dict()
+        assert data["url_date"] == "1971-12-08"
+        assert data["title_date"] is None
+        assert data["date_mismatch"] is False

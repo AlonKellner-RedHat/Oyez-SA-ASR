@@ -4,6 +4,7 @@
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 _DIGITAL_ERA_START = 2006  # First term recorded directly to MP3
 
@@ -55,6 +56,111 @@ def get_recording_id(path: Path) -> str:
     """Extract common recording ID, stripping .delivery suffix from MP3."""
     stem = path.stem
     return stem[:-9] if stem.endswith(".delivery") else stem
+
+
+# Regexes for deterministic date extraction from recording_id (see module doc below).
+_LEGACY_DATE_RE = re.compile(r"^(\d{8})[a-z]_")
+_MODERN_DATE_RE = re.compile(r"_(\d{8})-")
+
+
+def parse_date_from_recording_id(recording_id: str) -> tuple[int, int, int] | None:
+    """Parse (year, month, day) from recording_id.
+
+    Date is encoded in every transcript's audio URL (metadata.audio_urls.mp3)
+    in a deterministic way:
+
+    - Legacy: {YYYYMMDD}{suffix}_{docket} e.g. 19951010a_94-1039 → 1995-10-10
+    - Modern: {docket}_{YYYYMMDD}-{type} e.g. 19-1392_20211201-argument → 2021-12-01
+
+    Returns (year, month, day) or None if not parseable. Month/day are validated
+    (1-12, 1-31).
+    """
+    # Legacy: 8 digits at start, then single letter and underscore
+    match = _LEGACY_DATE_RE.match(recording_id)
+    if match:
+        yyyymmdd = match.group(1)
+    else:
+        # Modern: 8 digits after underscore and before hyphen
+        match = _MODERN_DATE_RE.search(recording_id)
+        if not match:
+            return None
+        yyyymmdd = match.group(1)
+    try:
+        y, m, d = int(yyyymmdd[:4]), int(yyyymmdd[4:6]), int(yyyymmdd[6:8])
+        if 1 <= m <= 12 and 1 <= d <= 31:
+            return (y, m, d)
+    except (ValueError, IndexError):
+        pass
+    return None
+
+
+def get_recording_id_from_transcript(transcript: dict[str, Any]) -> str | None:
+    """Get recording_id from transcript metadata (mp3 URL basename)."""
+    urls = transcript.get("metadata", {}).get("audio_urls") or {}
+    mp3 = urls.get("mp3")
+    if not mp3 or not isinstance(mp3, str):
+        return None
+    name = mp3.rsplit("/", 1)[-1].strip()
+    if not name:
+        return None
+    # recording_id is the basename before first dot (e.g. .../X.delivery.mp3 -> X)
+    base = name.split(".")[0]
+    return base if base else None
+
+
+def extract_transcript_date(transcript: dict[str, Any]) -> tuple[int, int, int] | None:
+    """Extract (year, month, day) from a transcript dict.
+
+    Uses metadata.audio_urls.mp3 to get recording_id, then parses the
+    deterministically encoded date (see parse_date_from_recording_id).
+    """
+    rec_id = get_recording_id_from_transcript(transcript)
+    return parse_date_from_recording_id(rec_id) if rec_id else None
+
+
+_MONTH_NAMES = {
+    "january": 1,
+    "february": 2,
+    "march": 3,
+    "april": 4,
+    "may": 5,
+    "june": 6,
+    "july": 7,
+    "august": 8,
+    "september": 9,
+    "october": 10,
+    "november": 11,
+    "december": 12,
+}
+# Match " - Month DD, YYYY" or ", Month DD, YYYY" (e.g. "Oral Argument - December 01, 2021" or "Oral Argument, March 23, 2015")
+_TITLE_DATE_RE = re.compile(
+    r"[-,] ([A-Za-z]+) (\d{1,2}), (\d{4})(?:\s|$|[(\s])",
+)
+
+
+def parse_date_from_title(title: str) -> tuple[int, int, int] | None:
+    """Parse (year, month, day) from transcript title.
+
+    Expects format like "Oral Argument - December 01, 2021" or
+    "Opinion Announcement - May 20, 1996". Returns None if unparsable.
+    """
+    if not title or not isinstance(title, str):
+        return None
+    match = _TITLE_DATE_RE.search(title)
+    if not match:
+        return None
+    month_name, day_str, year_str = match.group(1), match.group(2), match.group(3)
+    month = _MONTH_NAMES.get(month_name.lower())
+    if month is None:
+        return None
+    try:
+        day = int(day_str)
+        year = int(year_str)
+        if 1 <= day <= 31 and year >= 1900:
+            return (year, month, day)
+    except ValueError:
+        pass
+    return None
 
 
 def get_preferred_format(term: str) -> tuple[str, str]:

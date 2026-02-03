@@ -5,10 +5,14 @@ from pathlib import Path
 
 from oyez_sa_asr.audio_source import (
     extract_term_docket,
+    extract_transcript_date,
     find_audio_sources,
     get_preferred_format,
     get_recording_id,
+    get_recording_id_from_transcript,
     get_source_era,
+    parse_date_from_recording_id,
+    parse_date_from_title,
     parse_transcript_type_from_recording_id,
 )
 
@@ -81,6 +85,144 @@ class TestParseTranscriptTypeFromRecordingId:
     def test_empty_string(self) -> None:
         """Returns unknown for empty string."""
         assert parse_transcript_type_from_recording_id("") == "unknown"
+
+
+class TestParseDateFromRecordingId:
+    """Tests for parse_date_from_recording_id (deterministic date from URL)."""
+
+    def test_modern_argument(self) -> None:
+        """Parses date from modern format."""
+        assert parse_date_from_recording_id("19-1392_20211201-argument") == (
+            2021,
+            12,
+            1,
+        )
+
+    def test_modern_opinion(self) -> None:
+        """Parses date from modern opinion."""
+        assert parse_date_from_recording_id("22-166_20230525-opinion") == (
+            2023,
+            5,
+            25,
+        )
+
+    def test_legacy_argument(self) -> None:
+        """Parses date from legacy format (YYYYMMDD at start)."""
+        assert parse_date_from_recording_id("19951010a_94-1039") == (1995, 10, 10)
+
+    def test_legacy_reargument(self) -> None:
+        """Parses date from legacy reargument."""
+        assert parse_date_from_recording_id("19551013r_3") == (1955, 10, 13)
+
+    def test_unknown_format_returns_none(self) -> None:
+        """Returns None for unrecognized format."""
+        assert parse_date_from_recording_id("random-id") is None
+
+    def test_empty_returns_none(self) -> None:
+        """Returns None for empty string."""
+        assert parse_date_from_recording_id("") is None
+
+
+class TestGetRecordingIdFromTranscript:
+    """Tests for get_recording_id_from_transcript."""
+
+    def test_modern_mp3_url(self) -> None:
+        """Extracts recording_id from modern mp3 URL."""
+        t = {
+            "metadata": {
+                "audio_urls": {
+                    "mp3": "https://s3.../19-1392_20211201-argument.delivery.mp3",
+                },
+            },
+        }
+        assert get_recording_id_from_transcript(t) == "19-1392_20211201-argument"
+
+    def test_legacy_mp3_url(self) -> None:
+        """Extracts recording_id from legacy mp3 URL."""
+        t = {
+            "metadata": {
+                "audio_urls": {
+                    "mp3": "https://s3.../19951010a_94-1039.delivery.mp3",
+                },
+            },
+        }
+        assert get_recording_id_from_transcript(t) == "19951010a_94-1039"
+
+    def test_missing_audio_urls_returns_none(self) -> None:
+        """Returns None when metadata.audio_urls missing."""
+        assert get_recording_id_from_transcript({"metadata": {}}) is None
+
+    def test_missing_mp3_returns_none(self) -> None:
+        """Returns None when mp3 URL missing."""
+        t = {"metadata": {"audio_urls": {"ogg": "https://..."}}}
+        assert get_recording_id_from_transcript(t) is None
+
+
+class TestParseDateFromTitle:
+    """Tests for parse_date_from_title."""
+
+    def test_dash_format(self) -> None:
+        """Parses 'Oral Argument - December 01, 2021'."""
+        assert parse_date_from_title("Oral Argument - December 01, 2021") == (
+            2021,
+            12,
+            1,
+        )
+
+    def test_comma_format(self) -> None:
+        """Parses 'Oral Argument, March 23, 2015' (no dash before date)."""
+        assert parse_date_from_title("Oral Argument, March 23, 2015") == (
+            2015,
+            3,
+            23,
+        )
+
+    def test_opinion_announcement(self) -> None:
+        """Parses 'Opinion Announcement - May 20, 1996'."""
+        assert parse_date_from_title("Opinion Announcement - May 20, 1996") == (
+            1996,
+            5,
+            20,
+        )
+
+    def test_no_date_returns_none(self) -> None:
+        """Returns None when title has no date."""
+        assert parse_date_from_title("Wisconsin v. Yoder - Life of the Law") is None
+
+    def test_empty_returns_none(self) -> None:
+        """Returns None for empty or None."""
+        assert parse_date_from_title("") is None
+        assert parse_date_from_title(None) is None  # type: ignore[arg-type]
+
+
+class TestExtractTranscriptDate:
+    """Tests for extract_transcript_date."""
+
+    def test_modern_transcript(self) -> None:
+        """Extracts date from transcript with modern URL."""
+        t = {
+            "metadata": {
+                "audio_urls": {
+                    "mp3": "https://s3.../19-1392_20211201-argument.delivery.mp3",
+                },
+            },
+        }
+        assert extract_transcript_date(t) == (2021, 12, 1)
+
+    def test_legacy_transcript(self) -> None:
+        """Extracts date from transcript with legacy URL."""
+        t = {
+            "metadata": {
+                "audio_urls": {
+                    "mp3": "https://s3.../19951010a_94-1039.delivery.mp3",
+                },
+            },
+        }
+        assert extract_transcript_date(t) == (1995, 10, 10)
+
+    def test_no_audio_urls_returns_none(self) -> None:
+        """Returns None when transcript has no audio_urls."""
+        assert extract_transcript_date({"metadata": {}}) is None
 
 
 class TestGetRecordingId:
