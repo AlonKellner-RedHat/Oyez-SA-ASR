@@ -25,7 +25,8 @@
 				"maattdd.gitless",
 				"rafaelha.vscode-flamegraph",
 				"ryanluker.vscode-coverage-gutters",
-				"anthropic.claude-code"
+				"anthropic.claude-code",
+				".devcontainer/vendor/sukumo28.wav-preview-2.6.0.vsix"
 			]
 		}
 	},
