@@ -40,7 +40,7 @@ def get_extension_for_content_type(content_type: str) -> str:
         File extension including the dot (e.g., '.json').
     """
     # Strip parameters like charset
-    base_type = content_type.split(";")[0].strip().lower()
+    base_type = content_type.split(";", maxsplit=1)[0].strip().lower()
 
     # Check exact match first
     if base_type in CONTENT_TYPE_EXTENSIONS:

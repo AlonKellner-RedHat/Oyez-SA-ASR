@@ -20,3 +20,5 @@ TODO
 
 - [User Guide](user-guide.md) - Complete usage instructions
 - [Examples](examples.md) - Common use cases and examples
+- [ASR normalization findings](asr_normalization_findings.md) - Transcript vs pronunciation
+  discrepancies and normalization strategies

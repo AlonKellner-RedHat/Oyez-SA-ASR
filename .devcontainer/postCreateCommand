@@ -88,7 +88,8 @@ pre-commit install --install-hooks -t pre-commit -t commit-msg -t post-commit -t
 
 # --- PART 4: sideloaded extensions (not on OpenVSX) ---
 # Edited by Cursor: list in vendor-extensions.conf; download missing VSIXs to vendor/.
-# Client installs from devcontainer.json "extensions" path; no code CLI needed.
+# Marketplace returns gzip; use --compressed (curl) or gunzip (wget) so the file is valid ZIP.
+# See: https://stackoverflow.com/questions/60090123
 VENDOR_DIR="/app/.devcontainer/vendor"
 CONF="/app/.devcontainer/vendor-extensions.conf"
 if [ -f "$CONF" ]; then
@@ -101,12 +102,13 @@ if [ -f "$CONF" ]; then
 		else
 			echo "   Downloading ${publisher}.${extension_id} to vendor..."
 			DOWNLOAD_URL="https://marketplace.visualstudio.com/_apis/public/gallery/publishers/${publisher}/vsextensions/${extension_id}/${version}/vspackage"
-			if command -v wget &>/dev/null; then
-				wget -q -O "$VSIX" "$DOWNLOAD_URL" || true
-			elif command -v curl &>/dev/null; then
-				curl -sSL -o "$VSIX" "$DOWNLOAD_URL" || true
+			TMP_VSIX="${VSIX}.tmp"
+			if command -v curl &>/dev/null; then
+				curl -sSL --compressed -o "$TMP_VSIX" "$DOWNLOAD_URL" && mv "$TMP_VSIX" "$VSIX" || rm -f "$TMP_VSIX"
+			elif command -v wget &>/dev/null; then
+				wget -q -O "$TMP_VSIX" "$DOWNLOAD_URL" && (gunzip -c "$TMP_VSIX" > "$VSIX" 2>/dev/null && rm -f "$TMP_VSIX" || mv "$TMP_VSIX" "$VSIX") || rm -f "$TMP_VSIX"
 			else
-				echo "   Skipping ${publisher}.${extension_id}: no wget/curl. See .devcontainer/vendor/README.md."
+				echo "   Skipping ${publisher}.${extension_id}: no curl/wget. See .devcontainer/vendor/README.md."
 			fi
 		fi
 	done < "$CONF"

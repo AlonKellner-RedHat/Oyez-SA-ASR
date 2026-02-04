@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Install vendor VSIX extensions (idempotent) before other post-start steps.
+[ -x "./.devcontainer/install-vendor-extensions.sh" ] && ./.devcontainer/install-vendor-extensions.sh || true
+
 PUBKEY_IMPORT_FILE="./.devcontainer/host_pubkeys.asc"
 
 # NEW: Import the public keys exported from the host
