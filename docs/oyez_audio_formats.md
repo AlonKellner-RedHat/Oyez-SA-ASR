@@ -140,6 +140,23 @@ s3.amazonaws.com/oyez.case-media.hls/case_data/{term}/{docket}/...
 | concurring | 950 |
 | dissenting | 948 |
 
+## Processed FLAC and metadata
+
+When cached audio (MP3/OGG) is converted to FLAC (e.g. via `oyez process
+audio`), each output FLAC is written alongside a **metadata file** with
+the same base name and extension `.metadata.json`. That file records the
+**raw source** and audio metadata so every processed FLAC is traceable to
+its source:
+
+- **`source_path`** – Absolute or relative path to the raw cached file
+  (MP3 or OGG) that was converted to this FLAC.
+- **`source_format`** – `"mp3"` or `"ogg"`.
+- **`duration`**, **`sample_rate`**, **`channels`** – From the decoded
+  audio; **`is_anomaly`** when anomalies (e.g. silence) are detected.
+
+Layout: `{output_dir}/{term}/{docket}/{recording_id}.flac` and
+`{recording_id}.metadata.json` in the same directory.
+
 ## Next Steps for Audio ASR
 
 To build an ASR dataset from this data:

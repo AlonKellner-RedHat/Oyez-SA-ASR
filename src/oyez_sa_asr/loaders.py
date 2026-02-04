@@ -67,7 +67,7 @@ def _get_simple_features() -> Any:
 try:
     SIMPLE_FEATURES = _get_simple_features()
 except ImportError:
-    SIMPLE_FEATURES = None  # type: ignore[assignment]
+    SIMPLE_FEATURES = None
 
 
 def load_simple_hf(

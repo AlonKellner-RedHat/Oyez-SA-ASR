@@ -30,11 +30,23 @@ CLI: `oyez dataset flex`
 
 ```text
 oyez-sa-asr-flex/
-├── audio/{term}/{docket}/*.flac   # 24-bit FLAC
+├── audio/{term}/{docket}/
+│   ├── {recording_id}.flac           # 24-bit FLAC
+│   └── {recording_id}.metadata.json  # Raw source + audio metadata
 └── data/
     ├── recordings.parquet         # Full recording metadata
     └── utterances.parquet         # Speaker turn refs (no audio)
 ```
+
+Each processed FLAC has a **corresponding metadata file** (same stem,
+`.metadata.json`) that records the **raw source** and audio properties:
+
+- **`source_path`** – Path to the original cached file (MP3/OGG) used to
+  produce the FLAC.
+- **`source_format`** – `"mp3"` or `"ogg"`.
+- **`source_era`** – Era tag for format selection.
+- **`duration`**, **`sample_rate`**, **`channels`** – From the decoded audio.
+- **`is_anomaly`** (optional) – Set when silence/noise anomalies are detected.
 
 ### Configs
 
