@@ -129,6 +129,7 @@ exclude = [
   "tests/test_term_parser.py",
   "tests/test_worker_pool.py",
   "docs/asr_normalization_findings.md",
+  "docs/asr_normalization_plan.md",
   "scripts/collect_asr_artifacts.py",
   "tests/test_collect_asr_artifacts.py",
 ]

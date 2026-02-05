@@ -22,3 +22,5 @@ TODO
 - [Examples](examples.md) - Common use cases and examples
 - [ASR normalization findings](asr_normalization_findings.md) - Transcript vs pronunciation
   discrepancies and normalization strategies
+- [ASR normalization plan](asr_normalization_plan.md) - Rules, precedence, flow,
+  multi-option output, and interruption handling

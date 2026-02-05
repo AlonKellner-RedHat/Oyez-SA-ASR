@@ -6,7 +6,8 @@ Findings from human listening verification of Oyez oral-argument and
 opinion transcripts, used to design normalization rules so training text
 matches spoken pronunciation (e.g. for ASR). See
 [scripts/collect_asr_artifacts.py](../scripts/collect_asr_artifacts.py)
-for artifact collection and the normalization plan for implementation.
+for artifact collection and [asr_normalization_plan.md](asr_normalization_plan.md)
+for the normalization plan (rules, precedence, flow, multi-option output).
 
 ---
 
