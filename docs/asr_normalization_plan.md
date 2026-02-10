@@ -103,6 +103,7 @@ outputs multiple options.
 
 | # | Rule | Match | Output (single) | Output (ambiguous) |
 |---|------|--------|-----------------|--------------------|
+| 0 | Transcription typos | Token/span in curated typo table ([data/transcription_typos.json](../data/transcription_typos.json)). | Correction (single). | — |
 | 1 | Unspoken header | (handled in Phase 1) | — | — |
 | 2 | Case/docket ID | Term-docket pattern (e.g. 21-1164, 13-1034). | Term as word + second segment by digit group (e.g. "twenty one eleven sixty four"). | — |
 | 3 | Vote tally | N-N classified as vote (9-0, 7-2). | "nine to zero", "seven to two". | — |
@@ -131,6 +132,50 @@ outputs multiple options.
 | 26 | Leading decimal | .N (not year). | "point" + digits (e.g. "point six six"). | — |
 | 27 | Non-speech brackets | (Inaudible), [Laughter], [cough], etc. | Strip. | — |
 | 28 | Editorial [= X] | [= Mr.], [= 1983]. | Replace with normalized X, then strip brackets. | — |
+
+### 4.4 Transcription typos
+
+Transcription typos (e.g. equitable0, (Inauidble)) are transcriber errors;
+correct them to a canonical form so normalized text matches pronunciation.
+
+- **Source of truth:** Curated table in
+  [data/transcription_typos.json](../data/transcription_typos.json) (typo →
+  correction). Initial entries from findings; extend with verified entries
+  from typos-CLI candidate review.
+- **Discovery:** Run the **typos** CLI with a custom config on
+  `data/transcripts` in **check-only** mode (no `--write-changes`). Use
+  [config/typos-transcripts.toml](../config/typos-transcripts.toml) and
+  `default.extend-words` for valid transcript/legal vocabulary so only real
+  anomalies are reported. Parse the typos output (e.g. `--format json`) and
+  build a candidate list per typo with **all** suggested corrections (typos
+  may suggest multiple options). Each candidate has `typo`, `corrections`:
+  list of `{ "text", "keyboard_dist", "levenshtein_dist" }`, `count`,
+  `occurrences`. Distances are computed per (typo, correction) pair.
+- **Workflow (steps):**
+  1. Run typos on transcripts (check-only):  
+     `typos -c config/typos-transcripts.toml --format json data/transcripts > data/typos_transcripts_report.json`  
+     (omit `--write-changes` so no files are modified).
+  2. Rebuild candidates (all corrections, distances):  
+     `python scripts/rebuild_typo_candidates_with_corrections.py`  
+     Writes [data/transcription_typo_candidates.json](../data/transcription_typo_candidates.json).
+  3. Human review of `data/transcription_typo_candidates.json`: add **verified** typos to [data/transcription_typos.json](../data/transcription_typos.json); add **false positives** to [config/typos-transcripts.toml](../config/typos-transcripts.toml) `default.extend-words` for the next run.
+  4. Re-run typos and rebuild as needed after updating the config.
+
+### 4.5 Unified schema and rule candidate files
+
+All rule correction candidate files (typos and other rules) use a **unified schema** so downstream tools can consume them consistently.
+
+- **Top level:** `rule_id`, `rule_name`, `candidates`, `filter_note`.
+- **Each candidate:** `span` (matched text), `corrections` (list of `{ "text" }`), `count`, `occurrences`, `occurrences_truncated`.
+- **Each occurrence:** `path` (transcript path), `line_num` (turn index), **`start_index`** (character offset in the turn segment). `start_index` is required.
+
+**Typo candidates:** Produced by `scripts/rebuild_typo_candidates_with_corrections.py` (and optionally `scripts/typo_distances.py` for distances). Output: [data/transcription_typo_candidates.json](../data/transcription_typo_candidates.json) with `rule_id: "transcription_typos"`.
+
+**Other rules (vote_tally, years, roman_numerals, percentages, decades):** Produced by `scripts/build_rule_candidates.py`, which scans transcripts, groups matches by (rule_id, span), applies the normalization registry, and writes one file per rule to `data/<rule_id>_candidates.json` (e.g. `vote_tally_candidates.json`). Run via `just rule-candidates` (default: `-i data/transcripts`, `-o data`).
+
+**latin_extended:** Word-based rule for tokens containing Latin accented characters (see [awareness_unique_chars.md](awareness_unique_chars.md) for the character set). Produces **multiple corrections** per span; each correction has `text` (required) and optional **`method`**: `simple_map` (NFD strip), `uroman` (default romanization), or `uroman_<lcode>` (e.g. `uroman_pol`, `uroman_spa`). Uses the `uroman` dependency for full corrections; if uroman is unavailable, only `simple_map` is used.
+
+**Awareness-only (no normalization):** Produced by `scripts/build_awareness_candidates.py`; same unified schema but with `corrections: []` and a filter_note that these have no normalization rule (e.g. `data/awareness_mixed_case_candidates.json`). Run via `just awareness-candidates`.
 
 ### 4.2 Multi-option output format
 

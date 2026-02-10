@@ -24,3 +24,17 @@ test *ARGS:
 coverage:
     git add .
     pre-commit run tox
+
+# run typos on transcripts (check-only); rebuild candidates with all corrections + distances (see docs/asr_normalization_plan.md §4.4)
+# typos exits non-zero when it finds typos, so first line may fail
+typos-transcripts:
+    - uvx typos -c config/typos-transcripts.toml --format json data/transcripts > data/typos_transcripts_report.json
+    python scripts/rebuild_typo_candidates_with_corrections.py
+
+# build rule correction candidates from transcripts (vote_tally, years, roman_numerals, etc.); writes data/<rule_id>_candidates.json (see docs §4.5)
+rule-candidates:
+    python -m scripts.build_rule_candidates
+
+# build awareness-only candidates (no normalization); writes data/awareness_*_candidates.json with corrections: [] (see docs §4.5)
+awareness-candidates:
+    python -m scripts.build_awareness_candidates

@@ -705,7 +705,7 @@ Up-to-date status of all rules, verification counts, and situations where
 - **Percent:** With symbol (50%) or with word “percent” (70 percent) → both spoken as number + “percent” (Fifty percent, Seventy percent).
 - **Document/page numbers:** Page 7 → page Seven; pages 613 and 614 → Six Thirteen and Fourteen; SEC docket 818-105-1-2 → digit/dash style (document ID, not vote).
 - **Code/section with dash:** “16-1501” heard as “Fifteen -- Sixteen Fifteen Oh One” (possible “Title 16” + “1501”); “13702” → “Thirteen Seven Oh Two”. Inconsistent hyphen handling; treat as statute/code and use digit-style.
-- **Transcript typos:** e.g. “equitable0” → normalize to “equitable” when generating pronunciation.
+- **Transcript typos:** e.g. “equitable0” → normalize to “equitable” when generating pronunciation. Detection: typos CLI with custom config on transcripts (check-only); candidates parsed and reviewed. Source of truth and handling: see [ASR normalization plan](asr_normalization_plan.md) §4.4 and [data/transcription_typos.json](../data/transcription_typos.json).
 - **Quote marks:** Unicode “…” in transcript may correspond to “and I quote … Close the quote” in audio; optional normalization for ASR.
 
 **Awareness-only (report, not yet rules)**
