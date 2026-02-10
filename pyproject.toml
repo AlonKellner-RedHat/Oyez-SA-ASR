@@ -55,6 +55,8 @@ package = true
 default.extend-words.unparseable = "unparseable"
 # Ordinal suffix (e.g. 2nd, 22nd); do not correct to "and"
 default.extend-words.nd = "nd"
+# Proper name (e.g. Condé Nast in generated reports)
+default.extend-words.Nast = "Nast"
 files.extend-exclude = [ "**/.env.*" ]
 
 [tool.pytest]
@@ -120,8 +122,13 @@ exclude = [
   "tests/test_worker_pool.py",
   "docs/asr_normalization_findings.md",
   "docs/asr_normalization_plan.md",
+  "docs/awareness_examples_report.md",
+  "scripts/build_rule_candidates.py",
   "scripts/collect_asr_artifacts.py",
+  "scripts/rule_normalizations/__init__.py",
+  "tests/test_build_rule_candidates.py",
   "tests/test_collect_asr_artifacts.py",
+  "tests/test_rule_normalizations.py",
 ]
 
 [tool.claude-pre-commit]

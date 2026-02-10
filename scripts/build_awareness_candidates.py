@@ -30,6 +30,7 @@ BRACKET_CONTENT_MAX = 80
 # Word = any non-whitespace run (space-delimited)
 WORD_RE = re.compile(r"\S+")
 DIGIT_LETTER_MIXED_RE = re.compile(r"\b(?=\w*\d)(?=\w*[A-Za-z])\w+\b")
+# Standard dash (ASCII hyphen-minus U+002D) is in string.punctuation and is allowed. Edited by Cursor.
 PUNCT = set(string.punctuation)
 
 AWARENESS_LABELS: dict[str, str] = {

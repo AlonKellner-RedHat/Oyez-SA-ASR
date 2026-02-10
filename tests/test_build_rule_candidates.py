@@ -121,3 +121,539 @@ def test_build_rule_candidates_latin_extended_output(tmp_path: Path) -> None:
     first = corrections[0]
     assert first.get("method") == "simple_map"
     assert first.get("text") == "cafe"
+
+
+def test_build_rule_candidates_quote_output(tmp_path: Path) -> None:
+    """Fixture with mixed quotes; assert open/close_double_quote_candidates.json exist with 10 corrections."""
+    transcripts_dir = tmp_path / "transcripts"
+    transcripts_dir.mkdir()
+    fixture = transcripts_dir / "sample" / "oral_argument.json"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        json.dumps(
+            {
+                "metadata": {},
+                "turns": [
+                    {"index": 0, "text": 'The word "a judicial procedure."'},
+                ],
+            },
+            indent=2,
+        )
+    )
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    _run_build_rule_candidates(
+        transcripts_dir, out_dir, cwd=Path(__file__).resolve().parents[1]
+    )
+
+    open_path = out_dir / "open_double_quote_candidates.json"
+    close_path = out_dir / "close_double_quote_candidates.json"
+    assert open_path.exists(), list(out_dir.iterdir())
+    assert close_path.exists(), list(out_dir.iterdir())
+    open_data = json.loads(open_path.read_text())
+    close_data = json.loads(close_path.read_text())
+    assert open_data.get("rule_id") == "open_double_quote"
+    assert close_data.get("rule_id") == "close_double_quote"
+    expected_corrections = [
+        "",
+        "quote",
+        "start quote",
+        "open quote",
+        "open the quote",
+        "I quote",
+        "and I quote",
+        "end quote",
+        "close quote",
+        "close the quote",
+    ]
+    for data in (open_data, close_data):
+        candidates = data.get("candidates", [])
+        assert candidates
+        for c in candidates:
+            corrections = c.get("corrections", [])
+            texts = [co.get("text") for co in corrections if "text" in co]
+            assert texts == expected_corrections, (data.get("rule_id"), texts)
+
+
+# Edited by Cursor
+def test_build_rule_candidates_single_letter_parens_output(tmp_path: Path) -> None:
+    """Fixture with (a) and (b); assert single_letter_parens_candidates.json has corrections ay, bee."""
+    transcripts_dir = tmp_path / "transcripts"
+    transcripts_dir.mkdir()
+    fixture = transcripts_dir / "sample" / "oral_argument.json"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        json.dumps(
+            {
+                "metadata": {},
+                "turns": [
+                    {"index": 0, "text": "(a) and (b) option (c)."},
+                ],
+            },
+            indent=2,
+        )
+    )
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    _run_build_rule_candidates(
+        transcripts_dir, out_dir, cwd=Path(__file__).resolve().parents[1]
+    )
+
+    path = out_dir / "single_letter_parens_candidates.json"
+    assert path.exists(), list(out_dir.iterdir())
+    data = json.loads(path.read_text())
+    assert data.get("rule_id") == "single_letter_parens"
+    candidates = data.get("candidates", [])
+    spans = [c.get("span") for c in candidates]
+    assert "(a)" in spans and "(b)" in spans
+    a_cand = next(c for c in candidates if c.get("span") == "(a)")
+    b_cand = next(c for c in candidates if c.get("span") == "(b)")
+    a_texts = [co.get("text") for co in a_cand.get("corrections", []) if "text" in co]
+    b_texts = [co.get("text") for co in b_cand.get("corrections", []) if "text" in co]
+    assert a_texts == ["ay"], a_texts
+    assert b_texts == ["bee"], b_texts
+
+
+def test_build_rule_candidates_number_parens_output(tmp_path: Path) -> None:
+    """Fixture with (1) and (32); assert number_parens_candidates.json has one, thirty two."""
+    transcripts_dir = tmp_path / "transcripts"
+    transcripts_dir.mkdir()
+    fixture = transcripts_dir / "sample" / "oral_argument.json"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        json.dumps(
+            {
+                "metadata": {},
+                "turns": [
+                    {"index": 0, "text": "See (1) and (32)."},
+                ],
+            },
+            indent=2,
+        )
+    )
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    _run_build_rule_candidates(
+        transcripts_dir, out_dir, cwd=Path(__file__).resolve().parents[1]
+    )
+
+    path = out_dir / "number_parens_candidates.json"
+    assert path.exists(), list(out_dir.iterdir())
+    data = json.loads(path.read_text())
+    assert data.get("rule_id") == "number_parens"
+    candidates = data.get("candidates", [])
+    one_cand = next((c for c in candidates if c.get("span") == "(1)"), None)
+    thirty2_cand = next((c for c in candidates if c.get("span") == "(32)"), None)
+    assert one_cand is not None, [c.get("span") for c in candidates]
+    assert thirty2_cand is not None, [c.get("span") for c in candidates]
+    one_texts = [
+        co.get("text") for co in one_cand.get("corrections", []) if "text" in co
+    ]
+    thirty2_texts = [
+        co.get("text") for co in thirty2_cand.get("corrections", []) if "text" in co
+    ]
+    assert one_texts == ["one"], one_texts
+    assert thirty2_texts == ["thirty two"], thirty2_texts
+
+
+def test_build_rule_candidates_dash_output(tmp_path: Path) -> None:
+    """Fixture with en/em dash or double hyphen; assert dash_candidates.json normalizes to -."""
+    transcripts_dir = tmp_path / "transcripts"
+    transcripts_dir.mkdir()
+    fixture = transcripts_dir / "sample" / "oral_argument.json"
+    fixture.parent.mkdir(parents=True)
+    # en dash U+2013, em dash U+2014, and ASCII --
+    fixture.write_text(
+        json.dumps(
+            {
+                "metadata": {},
+                "turns": [
+                    {"index": 0, "text": "word\u2013word and two--dashes."},
+                ],
+            },
+            indent=2,
+        )
+    )
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    _run_build_rule_candidates(
+        transcripts_dir, out_dir, cwd=Path(__file__).resolve().parents[1]
+    )
+
+    path = out_dir / "dash_candidates.json"
+    assert path.exists(), list(out_dir.iterdir())
+    data = json.loads(path.read_text())
+    assert data.get("rule_id") == "dash"
+    candidates = data.get("candidates", [])
+    assert candidates
+    for c in candidates:
+        corrections = c.get("corrections", [])
+        texts = [co.get("text") for co in corrections if "text" in co]
+        assert texts == ["-"], (c.get("span"), texts)
+
+
+def test_build_rule_candidates_parens_with_spaces_output(tmp_path: Path) -> None:
+    """Fixture with (a ) and ( 12); assert single_letter_parens and number_parens corrections."""
+    transcripts_dir = tmp_path / "transcripts"
+    transcripts_dir.mkdir()
+    fixture = transcripts_dir / "sample" / "oral_argument.json"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        json.dumps(
+            {
+                "metadata": {},
+                "turns": [
+                    {"index": 0, "text": "(a ) and ( 12)."},
+                ],
+            },
+            indent=2,
+        )
+    )
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    _run_build_rule_candidates(
+        transcripts_dir, out_dir, cwd=Path(__file__).resolve().parents[1]
+    )
+    letter_path = out_dir / "single_letter_parens_candidates.json"
+    number_path = out_dir / "number_parens_candidates.json"
+    assert letter_path.exists(), list(out_dir.iterdir())
+    assert number_path.exists(), list(out_dir.iterdir())
+    letter_data = json.loads(letter_path.read_text())
+    number_data = json.loads(number_path.read_text())
+    a_cand = next(
+        (c for c in letter_data.get("candidates", []) if "a" in c.get("span", "")),
+        None,
+    )
+    twelve_cand = next(
+        (c for c in number_data.get("candidates", []) if "12" in c.get("span", "")),
+        None,
+    )
+    assert a_cand is not None
+    assert twelve_cand is not None
+    a_texts = [co.get("text") for co in a_cand.get("corrections", []) if "text" in co]
+    twelve_texts = [
+        co.get("text") for co in twelve_cand.get("corrections", []) if "text" in co
+    ]
+    assert a_texts == ["ay"], a_texts
+    assert twelve_texts == ["twelve"], twelve_texts
+
+
+def test_build_rule_candidates_non_speech_brackets_output(tmp_path: Path) -> None:
+    """Fixture with (Inaudible) and [Laughter]; assert non_speech_brackets corrections [""]."""
+    transcripts_dir = tmp_path / "transcripts"
+    transcripts_dir.mkdir()
+    fixture = transcripts_dir / "sample" / "oral_argument.json"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        json.dumps(
+            {
+                "metadata": {},
+                "turns": [
+                    {"index": 0, "text": "(Inaudible) and [Laughter]."},
+                ],
+            },
+            indent=2,
+        )
+    )
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    _run_build_rule_candidates(
+        transcripts_dir, out_dir, cwd=Path(__file__).resolve().parents[1]
+    )
+    path = out_dir / "non_speech_brackets_candidates.json"
+    assert path.exists(), list(out_dir.iterdir())
+    data = json.loads(path.read_text())
+    assert data.get("rule_id") == "non_speech_brackets"
+    candidates = data.get("candidates", [])
+    assert candidates
+    for c in candidates:
+        corrections = c.get("corrections", [])
+        texts = [co.get("text") for co in corrections if "text" in co]
+        assert texts == [""], (c.get("span"), texts)
+
+
+def test_build_rule_candidates_dash_ellipsis_output(tmp_path: Path) -> None:
+    """Fixture with ellipsis …; assert dash rule emits it and correction is -."""
+    transcripts_dir = tmp_path / "transcripts"
+    transcripts_dir.mkdir()
+    fixture = transcripts_dir / "sample" / "oral_argument.json"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        json.dumps(
+            {
+                "metadata": {},
+                "turns": [
+                    {"index": 0, "text": "word\u2026word"},
+                ],
+            },
+            indent=2,
+        )
+    )
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    _run_build_rule_candidates(
+        transcripts_dir, out_dir, cwd=Path(__file__).resolve().parents[1]
+    )
+    path = out_dir / "dash_candidates.json"
+    assert path.exists(), list(out_dir.iterdir())
+    data = json.loads(path.read_text())
+    candidates = data.get("candidates", [])
+    ellipsis_cand = next((c for c in candidates if "\u2026" in c.get("span", "")), None)
+    assert ellipsis_cand is not None, [c.get("span") for c in candidates]
+    texts = [
+        co.get("text") for co in ellipsis_cand.get("corrections", []) if "text" in co
+    ]
+    assert texts == ["-"], texts
+
+
+def test_build_rule_candidates_ordinals_output(tmp_path: Path) -> None:
+    """Fixture with 37th and 3rd; assert ordinals_candidates.json with thirty seventh, third."""
+    transcripts_dir = tmp_path / "transcripts"
+    transcripts_dir.mkdir()
+    fixture = transcripts_dir / "sample" / "oral_argument.json"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        json.dumps(
+            {
+                "metadata": {},
+                "turns": [
+                    {"index": 0, "text": "37th Congress and 3rd Session."},
+                ],
+            },
+            indent=2,
+        )
+    )
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    _run_build_rule_candidates(
+        transcripts_dir, out_dir, cwd=Path(__file__).resolve().parents[1]
+    )
+    path = out_dir / "ordinals_candidates.json"
+    assert path.exists(), list(out_dir.iterdir())
+    data = json.loads(path.read_text())
+    assert data.get("rule_id") == "ordinals"
+    candidates = data.get("candidates", [])
+    thirty7 = next((c for c in candidates if c.get("span") == "37th"), None)
+    third = next((c for c in candidates if c.get("span") == "3rd"), None)
+    assert thirty7 is not None, [c.get("span") for c in candidates]
+    assert third is not None, [c.get("span") for c in candidates]
+    t7_texts = [co.get("text") for co in thirty7.get("corrections", []) if "text" in co]
+    t3_texts = [co.get("text") for co in third.get("corrections", []) if "text" in co]
+    assert t7_texts == ["thirty seventh"], t7_texts
+    assert t3_texts == ["third"], t3_texts
+
+
+def test_build_rule_candidates_curly_single_quotes_output(tmp_path: Path) -> None:
+    """Fixture with curly single quotes; assert open/close_double_quote contain U+2018/U+2019."""
+    transcripts_dir = tmp_path / "transcripts"
+    transcripts_dir.mkdir()
+    fixture = transcripts_dir / "sample" / "oral_argument.json"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        json.dumps(
+            {
+                "metadata": {},
+                "turns": [
+                    {"index": 0, "text": "\u2018I object.\u2019"},
+                ],
+            },
+            indent=2,
+        )
+    )
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    _run_build_rule_candidates(
+        transcripts_dir, out_dir, cwd=Path(__file__).resolve().parents[1]
+    )
+    open_data = json.loads((out_dir / "open_double_quote_candidates.json").read_text())
+    close_data = json.loads(
+        (out_dir / "close_double_quote_candidates.json").read_text()
+    )
+    open_spans = [c.get("span") for c in open_data.get("candidates", [])]
+    close_spans = [c.get("span") for c in close_data.get("candidates", [])]
+    assert "\u2018" in open_spans, open_spans
+    assert "\u2019" in close_spans, close_spans
+
+
+def test_build_rule_candidates_laughs_output(tmp_path: Path) -> None:
+    """Fixture with (Laughs); assert non_speech_brackets has correction [""]."""
+    transcripts_dir = tmp_path / "transcripts"
+    transcripts_dir.mkdir()
+    fixture = transcripts_dir / "sample" / "oral_argument.json"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        json.dumps(
+            {
+                "metadata": {},
+                "turns": [
+                    {"index": 0, "text": "Then (Laughs) and we continued."},
+                ],
+            },
+            indent=2,
+        )
+    )
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    _run_build_rule_candidates(
+        transcripts_dir, out_dir, cwd=Path(__file__).resolve().parents[1]
+    )
+    path = out_dir / "non_speech_brackets_candidates.json"
+    assert path.exists(), list(out_dir.iterdir())
+    data = json.loads(path.read_text())
+    laughs_cand = next(
+        (c for c in data.get("candidates", []) if "Laughs" in c.get("span", "")),
+        None,
+    )
+    assert laughs_cand is not None
+    texts = [
+        co.get("text") for co in laughs_cand.get("corrections", []) if "text" in co
+    ]
+    assert texts == [""], texts
+
+
+def test_build_rule_candidates_dash_dots_output(tmp_path: Path) -> None:
+    """Fixture with ...; assert dash_candidates.json has span ... and correction -."""
+    transcripts_dir = tmp_path / "transcripts"
+    transcripts_dir.mkdir()
+    fixture = transcripts_dir / "sample" / "oral_argument.json"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        json.dumps(
+            {
+                "metadata": {},
+                "turns": [
+                    {"index": 0, "text": "word...word"},
+                ],
+            },
+            indent=2,
+        )
+    )
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    _run_build_rule_candidates(
+        transcripts_dir, out_dir, cwd=Path(__file__).resolve().parents[1]
+    )
+    path = out_dir / "dash_candidates.json"
+    assert path.exists(), list(out_dir.iterdir())
+    data = json.loads(path.read_text())
+    dots_cand = next(
+        (c for c in data.get("candidates", []) if c.get("span") == "..."), None
+    )
+    assert dots_cand is not None, [c.get("span") for c in data.get("candidates", [])]
+    texts = [co.get("text") for co in dots_cand.get("corrections", []) if "text" in co]
+    assert texts == ["-"], texts
+
+
+def test_build_rule_candidates_decades_1860s_2010s_output(tmp_path: Path) -> None:
+    """Fixture with 1860s and 2010s; assert decades_candidates.json has eighteen sixties, twenty tens."""
+    transcripts_dir = tmp_path / "transcripts"
+    transcripts_dir.mkdir()
+    fixture = transcripts_dir / "sample" / "oral_argument.json"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        json.dumps(
+            {
+                "metadata": {},
+                "turns": [
+                    {"index": 0, "text": "1860s and 2010s."},
+                ],
+            },
+            indent=2,
+        )
+    )
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    _run_build_rule_candidates(
+        transcripts_dir, out_dir, cwd=Path(__file__).resolve().parents[1]
+    )
+    path = out_dir / "decades_candidates.json"
+    assert path.exists(), list(out_dir.iterdir())
+    data = json.loads(path.read_text())
+    candidates = data.get("candidates", [])
+    c1860 = next((c for c in candidates if c.get("span") == "1860s"), None)
+    c2010 = next((c for c in candidates if c.get("span") == "2010s"), None)
+    assert c1860 is not None, [c.get("span") for c in candidates]
+    assert c2010 is not None, [c.get("span") for c in candidates]
+    t1860 = [co.get("text") for co in c1860.get("corrections", []) if "text" in co]
+    t2010 = [co.get("text") for co in c2010.get("corrections", []) if "text" in co]
+    assert t1860 == ["eighteen sixties"], t1860
+    assert t2010 == ["twenty tens"], t2010
+
+
+# Edited by Cursor (ASR normalization rules expansion)
+def test_build_rule_candidates_digit_letter_mixed_output(tmp_path: Path) -> None:
+    """Fixture with 2d, 640L, 1392(d); assert digit_letter_mixed_candidates.json has spoken corrections."""
+    transcripts_dir = tmp_path / "transcripts"
+    transcripts_dir.mkdir()
+    fixture = transcripts_dir / "sample" / "oral_argument.json"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        json.dumps(
+            {
+                "metadata": {},
+                "turns": [
+                    {"index": 0, "text": "See 2d and 640L and 1392(d)."},
+                ],
+            },
+            indent=2,
+        )
+    )
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    _run_build_rule_candidates(
+        transcripts_dir, out_dir, cwd=Path(__file__).resolve().parents[1]
+    )
+    path = out_dir / "digit_letter_mixed_candidates.json"
+    assert path.exists(), list(out_dir.iterdir())
+    data = json.loads(path.read_text())
+    assert data.get("rule_id") == "digit_letter_mixed"
+    candidates = data.get("candidates", [])
+    c2d = next((c for c in candidates if c.get("span") == "2d"), None)
+    c640 = next((c for c in candidates if c.get("span") == "640L"), None)
+    c1392 = next((c for c in candidates if "1392" in c.get("span", "")), None)
+    assert c2d is not None, [c.get("span") for c in candidates]
+    assert c640 is not None, [c.get("span") for c in candidates]
+    assert c1392 is not None, [c.get("span") for c in candidates]
+    t2d = [co.get("text") for co in c2d.get("corrections", []) if "text" in co]
+    t640 = [co.get("text") for co in c640.get("corrections", []) if "text" in co]
+    t1392 = [co.get("text") for co in c1392.get("corrections", []) if "text" in co]
+    assert t2d == ["two dee"], t2d
+    assert t640 == ["six forty ell"], t640
+    assert t1392 == ["thirteen ninety two dee"], t1392
+
+
+def test_build_rule_candidates_numbered_list_marker_output(tmp_path: Path) -> None:
+    """Fixture with list context '1) first' and '5) fifth'; assert numbered_list_marker has one, five."""
+    transcripts_dir = tmp_path / "transcripts"
+    transcripts_dir.mkdir()
+    fixture = transcripts_dir / "sample" / "oral_argument.json"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        json.dumps(
+            {
+                "metadata": {},
+                "turns": [
+                    {"index": 0, "text": "Reasons: 1) first point 5) fifth."},
+                ],
+            },
+            indent=2,
+        )
+    )
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    _run_build_rule_candidates(
+        transcripts_dir, out_dir, cwd=Path(__file__).resolve().parents[1]
+    )
+    path = out_dir / "numbered_list_marker_candidates.json"
+    assert path.exists(), list(out_dir.iterdir())
+    data = json.loads(path.read_text())
+    assert data.get("rule_id") == "numbered_list_marker"
+    candidates = data.get("candidates", [])
+    one_cand = next((c for c in candidates if c.get("span") == "1)"), None)
+    five_cand = next((c for c in candidates if c.get("span") == "5)"), None)
+    assert one_cand is not None, [c.get("span") for c in candidates]
+    assert five_cand is not None, [c.get("span") for c in candidates]
+    t1 = [co.get("text") for co in one_cand.get("corrections", []) if "text" in co]
+    t5 = [co.get("text") for co in five_cand.get("corrections", []) if "text" in co]
+    assert t1 == ["one"], t1
+    assert t5 == ["five"], t5

@@ -78,8 +78,8 @@ VOTE_TALLY_RE = re.compile(r"\b(\d-\d)\b")
 ROMAN_NUMERAL_RE = re.compile(r"\b(II|III|IV|V|VI|VII|VIII|IX|X|XI|XII)\b")
 # Percentages: 50% or 25 percent
 PERCENTAGE_RE = re.compile(r"\d+%|\d+\s*percent")
-# Decades: 1980s, 1930s
-DECADE_RE = re.compile(r"\b(19|20)\d{2}s\b")
+# Decades: 1980s, 1930s; abbreviated 20s, 50s, 10s. Edited by Cursor.
+DECADE_RE = re.compile(r"\b(?:(18|19|20)\d{2}s|\d{2}s)\b")
 # Et al. (legal abbreviation)
 ET_AL_RE = re.compile(r"\bet\s+al\.?", re.IGNORECASE)
 # Word ordinals: Fifth, Seventh, Eighth (Circuit, Amendment)
@@ -203,7 +203,7 @@ def collect_from_text(text: str, artifacts: dict[str, Counter[str]]) -> None:
     # Percentages
     for m in PERCENTAGE_RE.finditer(text):
         _add(artifacts["percentages"], _normalize_percentage(m.group(0)))
-    # Decades
+    # Decades (4-digit and abbreviated 2-digit)
     for m in DECADE_RE.finditer(text):
         _add(artifacts["decades"], m.group(0))
     # Et al.

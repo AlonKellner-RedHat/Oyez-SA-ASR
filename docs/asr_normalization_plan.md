@@ -175,6 +175,32 @@ All rule correction candidate files (typos and other rules) use a **unified sche
 
 **latin_extended:** Word-based rule for tokens containing Latin accented characters (see [awareness_unique_chars.md](awareness_unique_chars.md) for the character set). Produces **multiple corrections** per span; each correction has `text` (required) and optional **`method`**: `simple_map` (NFD strip), `uroman` (default romanization), or `uroman_<lcode>` (e.g. `uroman_pol`, `uroman_spa`). Uses the `uroman` dependency for full corrections; if uroman is unavailable, only `simple_map` is used.
 
+**open_double_quote / close_double_quote:** Quote-like characters (straight/curly double and single quotes including U+2018, U+2019, primes, apostrophe) are classified as open or close using space position (space before = open, space after = close; start of turn = space before) and apostrophe iff rules (no word whitelist). Same **shared correction list** for both: empty string, quote, start quote, open quote, open the quote, I quote, and I quote, end quote, close quote, close the quote.
+
+**single_letter_parens:** Single letter in parentheses (e.g. (a), (a ), ( b)) → literal pronunciation (ay, bee, cee, …). Optional spaces inside parens are stripped. Case-insensitive; output lowercase. Produces one correction per span.
+
+**number_parens:** Number in parentheses (e.g. (1), ( 12), (32 )) → spoken number (one, twelve, thirty two). Optional spaces inside parens are stripped. Supports 0–999 via `number_to_words`. Produces one correction per span.
+
+**non_speech_brackets:** Bracket content ( ), [ ], or { } that matches a fixed list (Inaudible, Laughter, Laughs, Applause, Voice overlap, Coughing, etc.) → empty string. Case-insensitive. Produces one correction per span.
+
+**dash:** Non-standard dash (en dash –, em dash —, non-breaking hyphen, horizontal bar, ellipsis …), ASCII dot sequences (.., ..., ....), or dash sequences (--, ---) → single standard hyphen (-). The standard dash (ASCII hyphen-minus U+002D) is **allowed punctuation** (e.g. in awareness/other_char); a single ASCII hyphen is not emitted as a candidate.
+
+**ordinals:** Numeric ordinals (37th, 3rd, 1st, 21st) → spoken ordinal (thirty seventh, third, first, twenty first). Supports 1–99. Produces one correction per span.
+
+**decades:** Decades (1860s, 1980s, 2010s; abbreviated 20s, 50s, 10s) → spoken form (eighteen sixties, nineteen eighties, twenty tens; twenties, fifties, tens). Covers 4-digit `(18|19|20)\d{2}s` and 2-digit `\d{2}s`. Produces one correction per span.
+
+**digit_letter_mixed:** Digit–letter mixed tokens (2d, A2, 640L, M50, 707{b}, 1392(d)) → spoken form (two dee, ay two, six forty ell, em fifty, seven oh seven bee, thirteen ninety two dee). Scanned as single tokens; numbers spoken code-style, letters via letter pronunciation. Produces one correction per span.
+
+**known_names:** Known name patterns (McLaughlin, McCoy, FitzGerald via Mc[A-Z][a-z]+ and Fitz[A-Z][a-z]+) → identity (no correction); marks spans as handled so they are excluded from uncovered awareness. Produces one correction (same as span) per span.
+
+**numbered_list_marker:** Numbered list marker (1), 5) only when list-marker context (preceded by start/space/colon/period, followed by space) → spoken number (one, five). Span is digit(s) + ")". Unmatched list items only; "see (1)" is not matched. Produces one correction per span.
+
+**Quote characters:** Quote scan includes U+2035 ‵, U+2032 ′, U+301D 〝, U+2033 ″ (reversed prime, prime, double prime quotation) so phrases like "the word ‵‵ burden ′′" and "〝 employee ″" are classified as open/close and get the same correction list as other quotes.
+
+**dash (expand):** Parenthesized single dot (.) or ( . ) → same dash rule, normalized to hyphen (-).
+
+**non_speech_brackets (expand):** Unbracketed phrases "Generallaughter." and "General laughter." (case-insensitive, optional trailing period) → empty string, same as bracketed non-speech.
+
 **Awareness-only (no normalization):** Produced by `scripts/build_awareness_candidates.py`; same unified schema but with `corrections: []` and a filter_note that these have no normalization rule (e.g. `data/awareness_mixed_case_candidates.json`). Run via `just awareness-candidates`.
 
 ### 4.2 Multi-option output format
