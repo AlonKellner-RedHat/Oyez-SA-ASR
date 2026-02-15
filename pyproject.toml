@@ -27,10 +27,14 @@ dependencies = [
   "aiobotocore>=2.7",
   "av",
   "datasets",
+  "english-words>=2",
   "httpx",
   "huggingface-hub>=0.20",
+  "nltk>=3.8",
   "numpy",
   "pyarrow>=15",
+  "pyenchant>=3.3",
+  "rapidfuzz>=3",
   "tqdm",
   "typer",
   "uroman",
@@ -57,12 +61,19 @@ default.extend-words.unparseable = "unparseable"
 default.extend-words.nd = "nd"
 # Proper name (e.g. Condé Nast in generated reports)
 default.extend-words.Nast = "Nast"
-files.extend-exclude = [ "**/.env.*" ]
+# Suffix name (e.g. -ment in enplanement); do not correct to "meant"
+default.extend-words.ment = "ment"
+# Truncated transcript snippets in awareness report (e.g. "define tha…", "…andle your job")
+default.extend-words.tha = "tha"
+default.extend-words.andle = "andle"
+# Test string "c ome" (merge -> come) in test_rule_normalizations.py
+default.extend-words.ome = "ome"
+files.extend-exclude = [ "**/.env.*", "tests/test_rule_normalizations.py" ]
 
 [tool.pytest]
 ini_options.pythonpath = "./src"
 ini_options.markers = [
-  "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+  "slow: marks tests as slow (>500ms; deselect with '-m \"not slow\"')",
 ]
 
 [tool.coverage]
@@ -77,13 +88,17 @@ src.exclude = [ "./.ties/**", "./.claude/**", "./scripts/**", "./notebooks/**" ]
 disable = [ "MD013", "MD036", "MD052" ]
 
 [tool.lintok]
-# Edited by Claude: Added exclusions for large files
+# Edited by Claude: Added exclusions for large files. Edited by Cursor: add scripts/tests over 2048 tokens.
 max_tokens = 2048
 exclude = [
   "uv.lock",
   "lcov.info",
   "pylock.toml",
   "requirements.txt",
+  "scripts/build_awareness_candidates.py",
+  "scripts/dictionary_loader.py",
+  "tests/test_build_awareness_candidates.py",
+  "tests/test_dictionary_loader.py",
   "src/oyez_sa_asr/cli_dataset_helpers.py",
   "src/oyez_sa_asr/cli_dataset_simple_proc.py",
   "src/oyez_sa_asr/cli_process_audio.py",

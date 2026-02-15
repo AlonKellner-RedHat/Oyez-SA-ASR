@@ -12,18 +12,28 @@ import argparse
 import json
 import re
 import string
+import time
 from collections import defaultdict
 from pathlib import Path
 
 from scripts.collect_asr_artifacts import (
     ALL_CAPS_LONG_RE,
     AWARENESS_SYMBOLS,
+    BRACKETS_ANGLE_RE,
     BRACKETS_CURLY_RE,
     BRACKETS_NUMBERED_RE,
     BRACKETS_PAREN_RE,
     BRACKETS_SQUARE_RE,
     LEADING_DECIMAL_RE,
     MIXED_CASE_RE,
+    ORDINAL_RE,
+    TIME_LIKE_RE,
+    YEAR_RE,
+)
+from scripts.dictionary_loader import (
+    get_english_dictionary,
+    is_valid_word_for_rules,
+    set_allow_no_enchant,
 )
 
 BRACKET_CONTENT_MAX = 80
@@ -42,12 +52,49 @@ AWARENESS_LABELS: dict[str, str] = {
     "awareness_brackets_square": "Brackets (square)",
     "awareness_brackets_curly": "Brackets (curly)",
     "awareness_brackets_numbered": "Numbered bracket (e.g. 1))",
+    "awareness_brackets_angle": "Angle brackets (<foo>)",  # TDD plan item 8
+    "awareness_time_like": "Time-like (12:34, 00:35:34, 9:38.5)",  # TDD plan item 11
     "awareness_leading_decimal": "Leading decimal (.66)",
     "awareness_digit_letter_mixed": "Word with digits and letters (e.g. H1N1, 2nd)",
     "awareness_other_char": "Character other than letter, digit, or punctuation",
+    "awareness_non_dictionary": "Word not in dictionary (e.g. befair, supremecourt)",
+    "awareness_single_letter": "Single letter (lowercase, not a/i/v/x, not followed by period) outside brackets and not adjacent to numbers",
 }
 
 FILTER_NOTE = "No normalization rule; awareness/review only."
+
+# Single letter optionally followed by trailing punctuation. Edited by Cursor.
+_SINGLE_LETTER_RE = re.compile(r"^[a-zA-Z][.,;:!?'\"]*$")
+_SINGLE_LETTER_ALLOWED = frozenset({"a", "v", "x", "i"})  # Exclude a, i, v, x
+
+# Letter, digit, apostrophe spans; require length >= 4 to be valid or suggest split. Edited by Cursor.
+LETTER_DIGIT_APOSTROPHE_SPAN_RE = re.compile(r"[a-zA-Z0-9']+")
+MIN_SPAN_LEN = 4
+# Substring ordinal/year (no word boundaries) for _is_valid_subspan
+_ORDINAL_SUBSTR_RE = re.compile(r"^\d+(?:st|nd|rd|th)$", re.IGNORECASE)
+_YEAR_SUBSTR_RE = re.compile(r"^(?:19|20)\d{2}$")
+
+
+def _is_valid_subspan(part: str, dic: frozenset[str] | object) -> bool:
+    """Return True if part is valid (dict or stem in dict), or ordinal (18th), or year, or all digits. Edited by Cursor."""
+    if not part:
+        return False
+    if is_valid_word_for_rules(part, dic):  # type: ignore[arg-type]
+        return True
+    if _ORDINAL_SUBSTR_RE.fullmatch(part):
+        return True
+    if _YEAR_SUBSTR_RE.fullmatch(part):
+        return True
+    return bool(part.isdigit())
+
+
+def _is_valid_word_for_non_dictionary(word: str, dic: frozenset[str]) -> bool:
+    """Return True if every letter/digit/apostrophe span of length >= 4 is valid (dic, ordinal, year, or digits). Edited by Cursor."""
+    for m in LETTER_DIGIT_APOSTROPHE_SPAN_RE.finditer(word):
+        span = m.group(0)
+        if len(span) >= MIN_SPAN_LEN and not _is_valid_subspan(span, dic):
+            return False
+    return True
 
 
 def _bracket_span(content: str, prefix: str, suffix: str) -> str:
@@ -58,50 +105,170 @@ def _bracket_span(content: str, prefix: str, suffix: str) -> str:
     return f"{prefix}{content}{suffix}"
 
 
-def _extract_awareness(text: str) -> list[tuple[str, int, str]]:
-    """Emit (category_id, start_index, span) for each awareness match. Word-based categories use space-delimited tokens; bracket matches may contain spaces and are a single span."""
+def _bracket_spans(text: str) -> list[tuple[int, int]]:
+    """Return (start, end) for every bracket match (parens, square, curly, angle, numbered). Edited by Cursor."""
+    spans: list[tuple[int, int]] = []
+    for pattern in (
+        BRACKETS_PAREN_RE,
+        BRACKETS_SQUARE_RE,
+        BRACKETS_CURLY_RE,
+        BRACKETS_ANGLE_RE,
+        BRACKETS_NUMBERED_RE,
+    ):
+        for m in pattern.finditer(text):
+            spans.append((m.start(), m.end()))
+    return spans
+
+
+def _in_brackets(start: int, end: int, bracket_spans: list[tuple[int, int]]) -> bool:
+    """Return True if [start, end) overlaps any bracket span. Edited by Cursor."""
+    return any(not (end <= s or e <= start) for s, e in bracket_spans)
+
+
+def _extract_awareness(
+    text: str,
+    profile_times: defaultdict | None = None,
+    dic: frozenset[str] | None = None,
+) -> list[tuple[str, int, str]]:
+    """Emit (category_id, start_index, span) for each match. Awareness does not suggest corrections. Edited by Cursor."""
     out: list[tuple[str, int, str]] = []
-    # Words: space-delimited tokens
-    for m in WORD_RE.finditer(text):
-        start_index = m.start()
-        word = m.group(0)
-        # awareness_non_ascii: word contains any non-ASCII
+    pt = profile_times
+    word_dic = dic if dic is not None else get_english_dictionary()
+    word_list = [(m.start(), m.group(0)) for m in WORD_RE.finditer(text)]
+    bracket_spans = _bracket_spans(text)
+    for _i, (start_index, word) in enumerate(word_list):
+        if pt is not None:
+            t0 = time.perf_counter()
         if any(ord(c) > 127 for c in word):
             out.append(("awareness_non_ascii", start_index, word))
-        # awareness_mixed_case
+        if pt is not None:
+            pt["awareness_non_ascii"] += time.perf_counter() - t0
+
+        if pt is not None:
+            t0 = time.perf_counter()
         if MIXED_CASE_RE.fullmatch(word):
             out.append(("awareness_mixed_case", start_index, word))
-        # awareness_all_caps_long
+        if pt is not None:
+            pt["awareness_mixed_case"] += time.perf_counter() - t0
+
+        if pt is not None:
+            t0 = time.perf_counter()
         if ALL_CAPS_LONG_RE.fullmatch(word):
             out.append(("awareness_all_caps_long", start_index, word))
-        # awareness_symbols: word is or contains symbol
+        if pt is not None:
+            pt["awareness_all_caps_long"] += time.perf_counter() - t0
+
+        if pt is not None:
+            t0 = time.perf_counter()
         if (
             word == "..."
             or word in AWARENESS_SYMBOLS
             or any(sym in word for sym in AWARENESS_SYMBOLS)
         ):
             out.append(("awareness_symbols", start_index, word))
-        # awareness_leading_decimal
+        if pt is not None:
+            pt["awareness_symbols"] += time.perf_counter() - t0
+
+        if pt is not None:
+            t0 = time.perf_counter()
+        if TIME_LIKE_RE.fullmatch(word):
+            out.append(("awareness_time_like", start_index, word))
+        if pt is not None:
+            pt["awareness_time_like"] += time.perf_counter() - t0
+
+        if pt is not None:
+            t0 = time.perf_counter()
         if LEADING_DECIMAL_RE.fullmatch(word):
             out.append(("awareness_leading_decimal", start_index, word))
-        # awareness_digit_letter_mixed
+        if pt is not None:
+            pt["awareness_leading_decimal"] += time.perf_counter() - t0
+
+        if pt is not None:
+            t0 = time.perf_counter()
         if DIGIT_LETTER_MIXED_RE.fullmatch(word):
             out.append(("awareness_digit_letter_mixed", start_index, word))
-        # awareness_other_char: word contains char that is not alnum and not punct
+        if pt is not None:
+            pt["awareness_digit_letter_mixed"] += time.perf_counter() - t0
+
+        if pt is not None:
+            t0 = time.perf_counter()
         if any(not c.isalnum() and c not in PUNCT for c in word):
             out.append(("awareness_other_char", start_index, word))
-    # Brackets: match full bracket span (may contain spaces)
+        if pt is not None:
+            pt["awareness_other_char"] += time.perf_counter() - t0
+
+        if pt is not None:
+            t0 = time.perf_counter()
+        if (
+            not _is_valid_word_for_non_dictionary(word, word_dic)
+            and not word.isdigit()
+            and not ORDINAL_RE.fullmatch(word)
+            and not YEAR_RE.fullmatch(word)
+            and not (word and word[0].isupper())  # skip capitalized (proper nouns)
+        ):
+            out.append(("awareness_non_dictionary", start_index, word))
+        if pt is not None:
+            pt["awareness_non_dictionary"] += time.perf_counter() - t0
+
+        if pt is not None:
+            t0 = time.perf_counter()
+        if _SINGLE_LETTER_RE.fullmatch(word):
+            letter = word[0].lower()
+            if (
+                word[0].islower()
+                and letter not in _SINGLE_LETTER_ALLOWED
+                and not word.endswith(".")
+            ) and not _in_brackets(start_index, start_index + len(word), bracket_spans):
+                prev_has_digit = _i > 0 and bool(re.search(r"\d", word_list[_i - 1][1]))
+                next_has_digit = _i < len(word_list) - 1 and bool(
+                    re.search(r"\d", word_list[_i + 1][1])
+                )
+                if not prev_has_digit and not next_has_digit:
+                    out.append(("awareness_single_letter", start_index, word))
+        if pt is not None:
+            pt["awareness_single_letter"] += time.perf_counter() - t0
+
+    if pt is not None:
+        t0 = time.perf_counter()
     for m in BRACKETS_PAREN_RE.finditer(text):
         span = _bracket_span(m.group(1), "(", ")")
         out.append(("awareness_brackets_parens", m.start(), span))
+    if pt is not None:
+        pt["awareness_brackets_parens"] += time.perf_counter() - t0
+
+    if pt is not None:
+        t0 = time.perf_counter()
     for m in BRACKETS_SQUARE_RE.finditer(text):
         span = _bracket_span(m.group(1), "[", "]")
         out.append(("awareness_brackets_square", m.start(), span))
+    if pt is not None:
+        pt["awareness_brackets_square"] += time.perf_counter() - t0
+
+    if pt is not None:
+        t0 = time.perf_counter()
     for m in BRACKETS_CURLY_RE.finditer(text):
         span = _bracket_span(m.group(1), "{", "}")
         out.append(("awareness_brackets_curly", m.start(), span))
+    if pt is not None:
+        pt["awareness_brackets_curly"] += time.perf_counter() - t0
+
+    if pt is not None:
+        t0 = time.perf_counter()
     for m in BRACKETS_NUMBERED_RE.finditer(text):
         out.append(("awareness_brackets_numbered", m.start(), m.group(0)))
+    if pt is not None:
+        pt["awareness_brackets_numbered"] += time.perf_counter() - t0
+
+    if pt is not None:
+        t0 = time.perf_counter()
+    for m in BRACKETS_ANGLE_RE.finditer(text):
+        span = m.group(0)
+        if len(span) > BRACKET_CONTENT_MAX + 2:
+            span = span[: BRACKET_CONTENT_MAX + 1] + "...>"
+        out.append(("awareness_brackets_angle", m.start(), span))
+    if pt is not None:
+        pt["awareness_brackets_angle"] += time.perf_counter() - t0
+
     return out
 
 
@@ -124,7 +291,27 @@ def main() -> None:
         default=Path("data"),
         help="Output directory for <category>_candidates.json",
     )
+    parser.add_argument(
+        "--profile",
+        type=int,
+        default=0,
+        metavar="N",
+        help="If N>0, process first N transcripts only and print per-category CPU time (then exit without writing). Edited by Cursor.",
+    )
+    parser.add_argument(
+        "--profile-report",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="When using --profile, write a markdown report to this path (default: docs/awareness_timing_report.md). Edited by Cursor.",
+    )
+    parser.add_argument(
+        "--allow-no-enchant",
+        action="store_true",
+        help="Allow fallback to word list when enchant (spell checker) is unavailable. By default, raise an error. Edited by Cursor.",
+    )
     args = parser.parse_args()
+    set_allow_no_enchant(getattr(args, "allow_no_enchant", False))
     transcripts_dir = args.input
     out_dir = args.output
     if not transcripts_dir.is_dir():
@@ -132,8 +319,17 @@ def main() -> None:
         raise SystemExit(1)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    groups: dict[tuple[str, str], list[tuple[str, int, int]]] = defaultdict(list)
-    for path in sorted(transcripts_dir.rglob("*.json")):
+    profile_n = getattr(args, "profile", 0) or 0
+    profile_times: defaultdict[str, float] = defaultdict(float)
+    paths_list = sorted(transcripts_dir.rglob("*.json"))
+    if profile_n > 0:
+        paths_list = paths_list[:profile_n]
+    dic = get_english_dictionary()
+
+    groups: dict[tuple[str, str], list[tuple[str, int, int, str | None]]] = defaultdict(
+        list
+    )
+    for path in paths_list:
         try:
             data = json.loads(path.read_text())
         except (json.JSONDecodeError, OSError):
@@ -150,8 +346,44 @@ def main() -> None:
             turn_index = turn.get("index", -1)
             if turn_index < 0:
                 continue
-            for category_id, start_index, span in _extract_awareness(text):
+            for category_id, start_index, span in _extract_awareness(
+                text,
+                profile_times=profile_times if profile_n else None,
+                dic=dic if profile_n else None,
+            ):
                 groups[(category_id, span)].append((path_str, turn_index, start_index))
+
+    if profile_n:
+        total = sum(profile_times.values())
+        sorted_cats = sorted(profile_times.keys(), key=lambda k: -profile_times[k])
+        print(
+            "Profile (first",
+            profile_n,
+            "transcripts) — per-category total (extract):",
+        )
+        for cat in sorted_cats:
+            t = profile_times[cat]
+            pct = 100 * t / total if total else 0
+            print(f"  {cat}: {t:.2f}s ({pct:.1f}%)")
+        report_path = getattr(args, "profile_report", None) or Path(
+            "docs/awareness_timing_report.md"
+        )
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        lines = [
+            "# Awareness timing report",
+            "",
+            f"Per-category CPU time (first {profile_n} transcripts).",
+            "",
+            "| Rank | Category | Time (s) | % |",
+            "| ---:| --- | ---: | ---: |",
+        ]
+        for rank, cat in enumerate(sorted_cats, 1):
+            t = profile_times[cat]
+            pct = 100 * t / total if total else 0
+            lines.append(f"| {rank} | {cat} | {t:.2f} | {pct:.1f} |")
+        report_path.write_text("\n".join(lines) + "\n")
+        print(f"Wrote report to {report_path}")
+        return
 
     for category_id, rule_name in AWARENESS_LABELS.items():
         candidates: list[dict] = []
@@ -162,10 +394,13 @@ def main() -> None:
                 {"path": p, "line_num": ln, "start_index": si}
                 for p, ln, si in occurrences_raw
             ]
+            corrections: list[
+                dict
+            ] = []  # Awareness does not suggest corrections; rules do.
             candidates.append(
                 {
                     "span": span,
-                    "corrections": [],
+                    "corrections": corrections,
                     "count": len(occurrences),
                     "occurrences": occurrences,
                     "occurrences_truncated": False,

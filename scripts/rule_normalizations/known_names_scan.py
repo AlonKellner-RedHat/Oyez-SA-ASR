@@ -3,8 +3,10 @@
 
 import re
 
-# Mc + capital + lowercase(s); Fitz + capital + lowercase(s). Mark as handled only.
-KNOWN_NAMES_RE = re.compile(r"\b(?:Mc[A-Z][a-z]+|Fitz[A-Z][a-z]+)\b")
+# Mc/Fitz/Mac/Le/De/La/Du + capital + lowercase(s). Mark as handled only. Edited by Cursor (DuPont/DuPage).
+KNOWN_NAMES_RE = re.compile(
+    r"\b(?:Mc[A-Z][a-z]+|Fitz[A-Z][a-z]+|Mac[A-Z][a-z]+|Le[A-Z][a-z]+|De[A-Z][a-z]+|La[A-Z][a-z]+|Du[A-Z][a-z]+)\b"
+)
 
 
 def scan_turn_known_names(

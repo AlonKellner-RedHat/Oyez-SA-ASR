@@ -1,0 +1,28 @@
+# Test-only fixture for legal dict cascade tests. Not a production source. Edited by Cursor.
+affirmance
+vacatur
+habeas
+conclusory
+judicata
+amici
+retrospective
+coercive
+# Bases for cascade-accepts-derived test (excludable, waivable, unobjected, etc.). Edited by Cursor.
+exclude
+waive
+object
+rehabilitate
+patent
+clear
+taxpayers
+# Bases for new awareness forms (indigency, administrability, etc.). Edited by Cursor.
+indigent
+administrable
+discriminatory
+arbitrable
+enplane
+# -rability -> arbiter stem (arbitrability). Edited by Cursor.
+arbiter
+# -ization (routinization), -ability (dischargability). Edited by Cursor.
+routinize
+dischargeable

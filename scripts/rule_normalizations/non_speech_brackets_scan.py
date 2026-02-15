@@ -5,8 +5,8 @@
 import re
 
 from scripts.rule_normalizations import (
-    NON_SPEECH_BRACKET_CONTENT,
     UNBRACKETED_NON_SPEECH_PHRASES,
+    is_non_speech_content,
 )
 
 PAREN_RE = re.compile(r"\(([^)]*)\)")
@@ -37,7 +37,7 @@ def scan_turn_non_speech_brackets(
         for m in pattern.finditer(text):
             content = m.group(1)
             content_norm = _content_normalized(content)
-            if content_norm in NON_SPEECH_BRACKET_CONTENT:
+            if is_non_speech_content(content_norm):
                 full_span = open_c + content + close_c
                 result.append(("non_speech_brackets", m.start(), full_span, path_str))
     for m in UNBRACKETED_NON_SPEECH_RE.finditer(text):

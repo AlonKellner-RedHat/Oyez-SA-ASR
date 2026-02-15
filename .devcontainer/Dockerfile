@@ -11,6 +11,7 @@ RUN --mount=type=cache,dst=/root/.cache/ DEBIAN_FRONTEND=noninteractive \
     echo apt-tools && apt-get update && apt-get upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends apt-transport-https \
         ca-certificates gnupg curl pkg-config cmake libssl-dev git expect \
+        libenchant-2-2 enchant-2 aspell aspell-en hunspell-en-us libnuspell5 nuspell \
     && mkdir -p /home/vscode/ && chown -R vscode:vscode /home/vscode/ \
     && mkdir -p /home/vscode/.cache && chown -R vscode:vscode /home/vscode/.cache \
     && mkdir -p /github/home/ && chown -R vscode:vscode /github/home/ \

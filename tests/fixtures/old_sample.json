@@ -1,0 +1,5 @@
+[
+	{ "title": "Affirmance", "letter": "A", "permalink": "bld-affirmance" },
+	{ "title": "Vacatur", "letter": "V", "permalink": "bld-vacatur" },
+	{ "title": "Habeas Corpus", "letter": "H", "permalink": "bld-habeas-corpus" }
+]

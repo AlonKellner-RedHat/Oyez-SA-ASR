@@ -24,3 +24,4 @@ TODO
   discrepancies and normalization strategies
 - [ASR normalization plan](asr_normalization_plan.md) - Rules, precedence, flow,
   multi-option output, and interruption handling
+- [Legal dictionary](legal_dictionary.md) - Legal dict in the cascade (LexPredict, Open Legal Dictionary)

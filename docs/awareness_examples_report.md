@@ -1,191 +1,334 @@
-# Awareness categories: 3 examples + context per category
+# Awareness categories: 10 examples + context per category
 
 Categories have no normalization rule (awareness/review only).
 Only occurrences **not covered** by any normalization rule (no overlapping rule span).
 
 Context is transcript turn text around the matched span.
 
-## Mixed case (e.g. McCloud) (`awareness_mixed_case`)
+## Word not in dictionary (e.g. befair, supremecourt) (`awareness_non_dictionary`)
 
-**Total:** 9,150 occurrences.
+**Total:** 1,548 occurrences.
 
-**Example 1** — span: 'McLaughlin'
+**Example 1** — span: 'assey'
 
-- Path: `1967/639/oral_argument.json` turn index 1, start_index 3329
-- Context: `…egislate of the area of sexual conduct. It was so stated in McLaughlin versus State of Florida. The Federal Government in all of t…`
+- Path: `1975/74-958/oral_argument.json` turn index 1, start_index 470
+- Context: `…t, both upon his suit for a refund of taxes collected under assey and also upon the Government’s counterclaim for the unpaid …`
 
-**Example 2** — span: 'McCoy'
+**Example 2** — span: 'rehabilitatability.'
 
-- Path: `2017/16-8255/oral_argument.json` turn index 164, start_index 185
-- Context: `…wanted was inextricably intertwined with the alibi that Mr. McCoy wanted, that it was not purely a questionable --`
+- Path: `2006/05-11284/oral_argument.json` turn index 34, start_index 521
+- Context: `…was argued as a basis for a finding of nondangerousness, of rehabilitatability. That's utterly untrue of evidence in Mr. Brewer's case and …`
 
-**Example 3** — span: 'TikTok'
+**Example 3** — span: 'admsixture'
 
-- Path: `2024/24-656/oral_argument.json` turn index 24, start_index 57
-- Context: `All right. So, if we get to that side of the issue, that TikTok U.S.A. has some sort of First Amendment right, taking your …`
+- Path: `1961/242/oral_argument.json` turn index 150, start_index 383
+- Context: `…al duties and nonjudicial duties. And although, you have an admsixture of judicial and nonjudicial duties, it is for purposes of t…`
 
-## Word with digits and letters (e.g. H1N1, 2nd) (`awareness_digit_letter_mixed`)
+**Example 4** — span: 'relateth'
 
-**Total:** 5,167 occurrences.
+- Path: `1960/60/oral_argument.json` turn index 69, start_index 1835
+- Context: `… written, "So then, it is not the consent of marriage as it relateth to the procreation of children that is requisite, for it ma…`
 
-**Example 1** — span: '2d'
+**Example 5** — span: 'didn?t,'
 
-- Path: `1977/77-5176/oral_argument.json` turn index 109, start_index 2511
-- Context: `…ry rule by means of case law, Rickards versus State , 77 A. 2d 199 (1950). This is prior to Map. Now, our supreme court, …`
+- Path: `1976/75-946/oral_argument.json` turn index 82, start_index 7
+- Context: `No, it didn?t, in fact, the bargaining session with the teachers was sched…`
 
-**Example 2** — span: '2d'
+**Example 6** — span: 'sprecifically'
 
-- Path: `1974/73-1461/oral_argument.json` turn index 97, start_index 1628
-- Context: `… October of last year, it's Baggs versus Anderson in 528 P. 2d 141, that was since the briefs were filed in this case. More…`
+- Path: `1980/79-1380/oral_argument.json` turn index 41, start_index 122
+- Context: `… read together with the medicaid eligibility provision that sprecifically applies to the appellees, the only factors that are really …`
 
-**Example 3** — span: '640L'
+**Example 7** — span: 'stipular'
 
-- Path: `1960/18/oral_argument.json` turn index 97, start_index 1351
-- Context: `…ould like to. But I have read and reread and reread Section 640L A2 of 12 U.S.C. and the way I read it, it has no application…`
+- Path: `2007/06-1413/oral_argument.json` turn index 90, start_index 148
+- Context: `…no economies of scale. We think this is unassailable in the stipular record--`
+
+**Example 8** — span: 'acney,'
+
+- Path: `1986/85-1924/oral_argument.json` turn index 137, start_index 1249
+- Context: `…n for me at XYZ Electric, they are non-union but I need the acney, is there a problem if I go to work for them? " And the union…`
+
+**Example 9** — span: 'sleeving,'
+
+- Path: `2014/13-271/oral_argument.json` turn index 62, start_index 429
+- Context: `…e wash trades, like paragraphs 55 and 56, practices such as sleeving, may be regulated by the states because they--`
+
+**Example 10** — span: 'shhh?'
+
+- Path: `2024/24-20/oral_argument.json` turn index 394, start_index 105
+- Context: `…urate interpretation of the Fifth Amendment, you're saying, shhh?`
 
 ## Brackets (parentheses) (`awareness_brackets_parens`)
 
-**Total:** 2,843 occurrences.
+**Total:** 24 occurrences.
 
-**Example 1** — span: '(ph)'
+**Example 1** — span: '(half-written)'
 
-- Path: `1970/96/oral_argument.json` turn index 174, start_index 165
-- Context: `… if it gives that opportunity it ought not dilute the diets (ph) it ought to be fair. It should not weigh one man's vote gre…`
+- Path: `1965/759/oral_argument.json` turn index 13, start_index 2423
+- Context: `…he did. Could not get penis into vagina, got about one-half (half-written) inch in.” The only thing missing or the only thing that the…`
 
-**Example 2** — span: '(.)'
+**Example 2** — span: '(collectively Dart)'
 
-- Path: `2008/08-322/oral_argument.json` turn index 250, start_index 654
-- Context: `… that really runs with the land is (.) is something that we (.) we think is inherently unjustifiable. I'd also like to addr…`
+- Path: `2014/13-719/opinion.json` turn index 1, start_index 698
+- Context: `…Dart Cherokee Basin Operating Company and a related company (collectively Dart) underpaid royalties owed to class members under certain oil…`
 
-**Example 3** — span: '(iv)'
+**Example 3** — span: '(including horticultural)'
 
-- Path: `2016/16-349/oral_argument.json` turn index 29, start_index 68
-- Context: `… couple other responses. One is that's not a solution to (F)(iv), to be clear, because --`
+- Path: `1955/162/oral_argument.json` turn index 1, start_index 616
+- Context: `…ish),” and the words involved in these cases, “agricultural (including horticultural) commodities, but (not including manufactured products there…`
 
-## Long all-caps (6+ letters) (`awareness_all_caps_long`)
+**Example 4** — span: '(Grand Met)'
 
-**Total:** 1,653 occurrences.
+- Path: `1996/96-842/opinion.json` turn index 0, start_index 509
+- Context: `…ey & Whitney. A London based company, Grand Metropolitan PLC(Grand Met), retained Dorsey & Whitney in connection with a planned ten…`
 
-**Example 1** — span: 'PROMESA'
+**Example 5** — span: '(Third)'
 
-- Path: `2019/18-1334/oral_argument.json` turn index 270, start_index 80
-- Context: `…, you cannot say that at the same time that you've read the PROMESA statute itself. And this Court --`
+- Path: `2024/23-1141/oral_argument.json` turn index 194, start_index 190
+- Context: `…alk foreseeability. I'm much more helped by the Restatement (Third) of Torts that basically says:  You impose liability for har…`
 
-**Example 2** — span: 'ASARCO'
+**Example 6** — span: '(including injunctions)'
 
-- Path: `2004/03-1696/oral_argument.json` turn index 140, start_index 316
-- Context: `…think that this... the discussion of Rooker-Feldman and the ASARCO case can be dismissed as dictum in that it was a specific r…`
+- Path: `1970/123/oral_argument.json` turn index 70, start_index 161
+- Context: `…ouble on this point arises from the word appropriate relief (including injunctions). We check back over the legislative history, we referred to…`
 
-**Example 3** — span: 'XXXIII'
+**Example 7** — span: '(against the defendant)'
 
-- Path: `1973/72-6902/oral_argument.json` turn index 51, start_index 665
-- Context: `…application for the warrant made out in offense under Title XXXIII of the District of Columbia Code. The issue was whether evi…`
+- Path: `1979/78-6809/oral_argument.json` turn index 31, start_index 431
+- Context: `…ilence in the face of specific accusation 'may not be used' (against the defendant), it would be a strange doctrine indeed that would permit si…`
+
+**Example 8** — span: '(affinity charter)'
+
+- Path: `1967/800/oral_argument.json` turn index 220, start_index 1076
+- Context: `…e rental planes to get to conventions or vacations -- these (affinity charter), now that term is derived from Board regulations which spea…`
+
+**Example 9** — span: '(Tobey)'
+
+- Path: `1958/383/oral_argument.json` turn index 9, start_index 1348
+- Context: `… evening paper, stated in part, “The defendant was Howard R.(Tobey) Marshall, once identified before a committee of the Oklahom…`
+
+**Example 10** — span: '(snap)'
+
+- Path: `2009/08-6925/oral_argument.json` turn index 137, start_index 173
+- Context: `… statute, all you know for sure is that he threatened to go (snap). That's all you know for sure that he has been convicted of…`
 
 ## Brackets (square) (`awareness_brackets_square`)
 
-**Total:** 927 occurrences.
+**Total:** 19 occurrences.
 
-**Example 1** — span: '[Luncheon Break]'
+**Example 1** — span: '[redacted]'
 
-- Path: `1974/73-689/oral_argument.json` turn index 40, start_index 22
-- Context: `If I may, Your Honor--[Luncheon Break]`
+- Path: `2022/22-196/oral_argument.json` turn index 234, start_index 751
+- Context: `…- you know, you can't take the law seriously when it says, "[redacted] and I went out and robbed Bill" is inadmissible, but "the w…`
 
-**Example 2** — span: '[Generallaughter.]'
+**Example 2** — span: '[her]'
 
-- Path: `1987/86-1715/oral_argument.json` turn index 73, start_index 8
-- Context: `--No. 0 [Generallaughter.] No, they are excellent judges. I think they regarded it as …`
+- Path: `2022/22-166/oral_argument.json` turn index 240, start_index 1643
+- Context: `… injury is she had a right to equity, which she defines as "[her] financial interest in the property after deducting encumber…`
 
-**Example 3** — span: '[Generallaughter.]'
+**Example 3** — span: '[C17H21NO4,]'
 
-- Path: `1983/82-485/oral_argument.json` turn index 106, start_index 47
-- Context: `Why don't you go to Guam while you're at it? 0 [Generallaughter.]`
+- Path: `2010/09-1533/oral_argument.json` turn index 47, start_index 174
+- Context: `…inition, if a substance is tested and chemically it is pure [C17H21NO4,] no trace of sodium bicarbonate, no trace of ammonium, is it…`
 
-## Numbered bracket (e.g. 1)) (`awareness_brackets_numbered`)
+**Example 4** — span: '[the law]'
 
-**Total:** 259 occurrences.
+- Path: `2024/23-1122/oral_argument.json` turn index 597, start_index 744
+- Context: `…nial to minors under 17 of access to materials condemned by [the law], insofar as that material is not obscene for persons" of ag…`
 
-**Example 1** — span: '1)'
+**Example 5** — span: '[Nods.]'
 
-- Path: `1999/99-244/oral_argument.json` turn index 17, start_index 106
-- Context: `…t happened in this particular case. The question is, given, 1) that Congress came in and categorically repudiated all of i…`
+- Path: `2012/11-1450/oral_argument.json` turn index 158, start_index 2
+- Context: `0 [Nods.]`
 
-**Example 2** — span: '1)'
+**Example 6** — span: '[*13]'
 
-- Path: `1998/97-1287/oral_argument.json` turn index 21, start_index 816
-- Context: `…reated a question of fact. But I think the point is is that 1) we're not bound by colloquialisms like that, and second, pe…`
+- Path: `2005/04-1203/oral_argument.json` turn index 47, start_index 749
+- Context: `… on a nationwide basis. And the third reason relates to the [*13] tailoring of the ADA remedy, which the -- which General Cle…`
 
-**Example 3** — span: '1)'
+**Example 7** — span: '[:log]'
 
-- Path: `1994/94-6187/oral_argument.json` turn index 28, start_index 120
-- Context: `…ell me the difference in the time served among these three: 1) We have an indictment for both crimes, 2) we have an indict…`
+- Path: `2001/01-309/oral_argument.json` turn index 255, start_index 121
+- Context: `…pisode, and there you can't even point to an activity loge. [:log] They didn't even write it up.`
+
+**Example 8** — span: '[indicating,]'
+
+- Path: `2012/11-564/oral_argument.json` turn index 173, start_index 65
+- Context: `…protect a person with a dog coming up to the door and going [indicating,] all right? Now, your response to that is what?`
+
+**Example 9** — span: '[:records]'
+
+- Path: `2001/01-679/oral_argument.json` turn index 96, start_index 196
+- Context: `…, denying the right to inspect and review education record. [:records] In your view, is that right a federally created right, or i…`
+
+**Example 10** — span: '[therefore,]'
+
+- Path: `2022/21-1164/oral_argument.json` turn index 20, start_index 290
+- Context: `…n is immune from suits save as it consents to be sued, and, [therefore,] the terms of its consent to be sued in any court define tha…`
+
+## Word with digits and letters (e.g. H1N1, 2nd) (`awareness_digit_letter_mixed`)
+
+**Total:** 11 occurrences.
+
+**Example 1** — span: 'Section17a'
+
+- Path: `1975/74-1042/oral_argument.json` turn index 161, start_index 72
+- Context: `… on 17a as we are suing under 10b, and our position is that Section17a sets up the duty and it also sets up the standard that has …`
+
+**Example 2** — span: '514b2b'
+
+- Path: `1990/89-1048/opinion.json` turn index 1, start_index 1107
+- Context: `…In the opinion filed today, we examine the scope of Section 514b2b of ERISA otherwise known as the deemer clause. The deemer c…`
+
+**Example 3** — span: '8B42B'
+
+- Path: `1978/78-225/oral_argument.json` turn index 279, start_index 4439
+- Context: `…out that language except picketing that is contained in the 8B42B proviso. It did so because of its First Amendment concerns.…`
+
+**Example 4** — span: 'CH53D'
+
+- Path: `1987/86-492/oral_argument.json` turn index 1, start_index 194
+- Context: `…er pilot and chaplain was killed in the crash of a Sikorsky CH53D helicopter. The helicopter crashed into the sea due to the …`
+
+**Example 5** — span: 'the1at'
+
+- Path: `1958/88/oral_argument.json` turn index 305, start_index 213
+- Context: `…thing in the stipulation of facts or anywhere in the record the1at this would be a -- a hardship or a burden upon the State, a…`
+
+**Example 6** — span: 'Section13C'
+
+- Path: `1975/74-1274/oral_argument.json` turn index 236, start_index 18
+- Context: `What purpose that Section13C said in light of your view of the Act?`
+
+**Example 7** — span: '77p0995e'
+
+- Path: `1977/76-1143/oral_argument.json` turn index 159, start_index 197
+- Context: `…arshall versus the Shellcast Corporation. It's civil number 77p0995e and was decided on July 26 of this year. In that case, the …`
+
+**Example 8** — span: '4X150G'
+
+- Path: `1975/74-712/oral_argument.json` turn index 1, start_index 589
+- Context: `…d radio accessory kit. A radio accessory kits operated with 4X150G electron tubes, the Contract required that these be “JAN” b…`
+
+**Example 9** — span: 'all0white'
+
+- Path: `1966/19/oral_argument.json` turn index 3, start_index 818
+- Context: `…ents the day before for picketing to gain admittance to the all0white movie theaters in Tallahassee. All of these happened in Sep…`
+
+**Example 10** — span: 'JA154A'
+
+- Path: `2016/15-8049/oral_argument.json` turn index 95, start_index 199
+- Context: `…t day and had just reviewed it over the lunch hour. This is JA154A and 165A. And the prosecutor is walking through all of the …`
+
+## Mixed case (e.g. McCloud) (`awareness_mixed_case`)
+
+**Total:** 6 occurrences.
+
+**Example 1** — span: 'GiVon'
+
+- Path: `2010/09-1476/oral_argument.json` turn index 79, start_index 70
+- Context: `…ll might be. That's similar to this Court's decision in the GiVon case. So that was a case where a teacher went to complain t…`
+
+**Example 2** — span: 'LoBue'
+
+- Path: `1955/373/oral_argument.json` turn index 9, start_index 4204
+- Context: `…andle your job during the year.” Then, in January 1947, Mr. LoBue is allotted 40 shares which represented his portion of the b…`
+
+**Example 3** — span: 'LoBue'
+
+- Path: `1955/373/oral_argument.json` turn index 9, start_index 4676
+- Context: `…'s welfare will warrant even greater recognition.” Now, Mr. LoBue exercised his rights under these three options by purchasing…`
+
+**Example 4** — span: 'LoBue'
+
+- Path: `1955/373/oral_argument.json` turn index 9, start_index 3627
+- Context: `…In January 1946, once again, Mr. Davis writes to inform Mr. LoBue that he has received a further allotment of 150 shares. And…`
+
+**Example 5** — span: 'LoBue'
+
+- Path: `1955/373/oral_argument.json` turn index 31, start_index 19
+- Context: `Mr. Davis told Mr. LoBue that one of the conditions was that the option, the right t…`
+
+**Example 6** — span: 'PanAm'
+
+- Path: `2018/17-646/oral_argument.json` turn index 200, start_index 72
+- Context: `…or, let me give you another example. There's the bombing of PanAm Flight 103 over Lockerbie, Scotland. That implicates the in…`
+
+## Single letter (lowercase, not a/i/v/x, not followed by period) outside brackets and not adjacent to numbers (`awareness_single_letter`)
+
+**Total:** 3 occurrences.
+
+**Example 1** — span: 'u?'
+
+- Path: `1966/456/oral_argument.json` turn index 178, start_index 22
+- Context: `Well, I misunderstood u?`
+
+**Example 2** — span: 'q?'
+
+- Path: `2023/22-846/oral_argument.json` turn index 64, start_index 20
+- Context: `-- can I go back to q? Because I was -- I don't know why it's incongruous or why i…`
+
+**Example 3** — span: "o'"
+
+- Path: `1977/76-1750/oral_argument.json` turn index 236, start_index 28
+- Context: `We will resume there at one o' clock. You may continue Mr. Finley. Before you do, let me g…`
 
 ## Non-ASCII character (`awareness_non_ascii`)
 
-**Total:** 255 occurrences.
+**Total:** 1 occurrences.
 
-**Example 1** — span: '′′'
+**Example 1** — span: '�1343'
 
-- Path: `2013/12-1128/oral_argument.json` turn index 3, start_index 158
-- Context: `…‵ burden of proof ′′ -- I think the word ‵‵ burden of proof ′′ used in the opinion below could be thought to be addressed …`
-
-**Example 2** — span: '§'
-
-- Path: `1994/94-286/opinion.json` turn index 1, start_index 1082
-- Context: `…lerk today, we affirm the judgment of the Court of Appeals. § 1392(d) of 15 of the U. S. C. prohibits the state from esta…`
-
-**Example 3** — span: '〝'
-
-- Path: `2013/12-3/oral_argument.json` turn index 11, start_index 70
-- Context: `…or, our view of this is that the -- the meaning of the term 〝 employee ″ depends on the context in which it's used and it…`
+- Path: `2022/21-1170/opinion.json` turn index 1, start_index 1106
+- Context: `…he Court today, we reverse the Wire Fraud Statute 18 U.S.C. �1343 criminalizes ?schemes or artifices to defraud or for obtain…`
 
 ## Character other than letter, digit, or punctuation (`awareness_other_char`)
 
-**Total:** 216 occurrences.
+**Total:** 1 occurrences.
 
-**Example 1** — span: '§2'
+**Example 1** — span: '�1343'
 
-- Path: `2022/21-1086/opinion.json` turn index 0, start_index 4255
-- Context: `…a also argues that its changes are necessary to ensure that §2 does not require racial proportionality in districting. Just…`
+- Path: `2022/21-1170/opinion.json` turn index 1, start_index 1106
+- Context: `…he Court today, we reverse the Wire Fraud Statute 18 U.S.C. �1343 criminalizes ?schemes or artifices to defraud or for obtain…`
 
-**Example 2** — span: '′′'
+## Long all-caps (6+ letters) (`awareness_all_caps_long`)
 
-- Path: `2013/12-574/oral_argument.json` turn index 167, start_index 851
-- Context: `… The ‵‵ shoot the gun ′′ example, the ‵‵ defraud the victim ′′ example.`
+**Total:** 0 occurrences.
 
-**Example 3** — span: 'Cond�'
+*No occurrences.*
 
-- Path: `2022/21-869/opinion.json` turn index 1, start_index 1643
-- Context: `… portrait of Prince on the cover of a magazine published by Cond� Nast. Cond� Nast's parent company is Vanity Fair. The year …`
+## Angle brackets (<foo>) (`awareness_brackets_angle`)
 
-## Leading decimal (.66) (`awareness_leading_decimal`)
+**Total:** 0 occurrences.
 
-**Total:** 59 occurrences.
-
-**Example 1** — span: '.38'
-
-- Path: `1979/78-1076/oral_argument.json` turn index 129, start_index 112
-- Context: `…ballistic tests on a sawed-off shotgun the way you can on a .38 caliber pistol; is that possible?`
-
-**Example 2** — span: '.22'
-
-- Path: `1960/236/oral_argument.json` turn index 41, start_index 521
-- Context: `… and left some of his clothes and these things, including a .22 caliber revolver, in the room. And when she discovered that…`
-
-**Example 3** — span: '.06'
-
-- Path: `2014/14-7955/oral_argument.json` turn index 201, start_index 183
-- Context: `…drug in doses of .02 to .06, and what it showed was that at .06 dose, there was less effect than at .02. And he said, this …`
+*No occurrences.*
 
 ## Brackets (curly) (`awareness_brackets_curly`)
 
-**Total:** 1 occurrences.
+**Total:** 0 occurrences.
 
-**Example 1** — span: '{b}'
+*No occurrences.*
 
-- Path: `2009/08-1119/oral_argument.json` turn index 25, start_index 145
-- Context: `…slative history or otherwise, that Congress intended the 707{b} standard to be the standard that governs what the lawyer ca…`
+## Numbered bracket (e.g. 1)) (`awareness_brackets_numbered`)
+
+**Total:** 0 occurrences.
+
+*No occurrences.*
+
+## Leading decimal (.66) (`awareness_leading_decimal`)
+
+**Total:** 0 occurrences.
+
+*No occurrences.*
 
 ## Typographic/legal symbol (`awareness_symbols`)
+
+**Total:** 0 occurrences.
+
+*No occurrences.*
+
+## Time-like (12:34, 00:35:34, 9:38.5) (`awareness_time_like`)
 
 **Total:** 0 occurrences.
 

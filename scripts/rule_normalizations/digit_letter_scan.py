@@ -4,9 +4,11 @@
 import re
 
 # Digit(s) + letter(s) as single token; digit(s) + {letter}; digit(s) + (letter).
+# Alternating (F2A, 5K1, R2D2, W2s); digit(s) + (two+ letters) e.g. 1395(ff). Edited by Cursor (TDD item 4).
 # Trailing (?!\w) allows match when followed by . or ) so 1392(d). matches.
 DIGIT_LETTER_RE = re.compile(
-    r"\b(?:\d+[a-zA-Z]+|[a-zA-Z]+\d+|\d+\{[a-zA-Z]\}|\d+\(\s*[a-zA-Z]\s*\))(?!\w)"
+    r"\b(?:\d+[a-zA-Z]+|[a-zA-Z]+\d+|\d+\{[a-zA-Z]\}|\d+\(\s*[a-zA-Z]\s*\)|"
+    r"([a-zA-Z]\d+)+[a-zA-Z]?|\d+([a-zA-Z]\d+)+|\d+\(\s*[a-zA-Z]{2,}\s*\))(?!\w)"
 )
 
 

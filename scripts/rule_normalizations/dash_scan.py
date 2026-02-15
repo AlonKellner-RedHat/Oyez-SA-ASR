@@ -5,8 +5,8 @@ import re
 
 from scripts.rule_normalizations import STANDARD_DASH
 
-# Hyphen U+002D, nbsp hyphen U+2011, en U+2013, em U+2014, horizontal bar U+2015, ellipsis U+2026
-DASH_LIKE_RE = re.compile(r"[-\u2011\u2013\u2014\u2015\u2026]+")
+# Hyphen U+002D, nbsp hyphen U+2011, en U+2013, em U+2014, horizontal bar U+2015, ellipsis U+2026, dot operator U+22C5 (⋅). Edited by Cursor (TDD item 3).
+DASH_LIKE_RE = re.compile(r"[-\u2011\u2013\u2014\u2015\u2026\u22c5]+")
 # ASCII dot ellipsis (.., ..., ....) -> same rule as dash. Edited by Cursor.
 DOT_ELLIPSIS_RE = re.compile(r"\.{2,}")
 # Parenthesized single dot (.) or ( . ) -> dash. Edited by Cursor.

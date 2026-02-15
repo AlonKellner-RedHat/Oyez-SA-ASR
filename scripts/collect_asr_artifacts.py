@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Edited by Cursor
+# Edited by Cursor (regex optim: year, roman, percentage, decade, ordinal)
 """
 Collect potential transcription artifacts for ASR normalization.
 
@@ -17,8 +17,8 @@ from pathlib import Path
 
 # Case/docket: 1-2 digits, hyphen, digits (e.g. 19-1392, 94-1039)
 CASE_ID_RE = re.compile(r"\b(\d{1,2}-\d+)\b")
-# Four-digit years
-YEAR_RE = re.compile(r"\b(19\d{2}|20\d{2})\b")
+# Four-digit years. Edited by Cursor (optim: factor (?:19|20)\d{2}, one capturing group).
+YEAR_RE = re.compile(r"\b((?:19|20)\d{2})\b")
 # Common abbreviations that may need expansion for ASR
 ABBREV_RE = re.compile(
     r"\b(Inc|No|Jr|Sr|Mr|Mrs|Ms|Dr|Gen|Gov|Hon|Sec|Rep|Sen|Prof|St|Vol|Ed|Rev|cf|e\.g|i\.e|etc|vs)\.(?=\s|$|[,\)])",
@@ -26,8 +26,8 @@ ABBREV_RE = re.compile(
 )
 # "versus" or "vs." as standalone
 VERSUS_RE = re.compile(r"\b(vs?\.?)\s+(?=[A-Z])", re.IGNORECASE)
-# Ordinals: 1st, 2nd, 3rd, 4th, ...
-ORDINAL_RE = re.compile(r"\b(\d+)(st|nd|rd|th)\b", re.IGNORECASE)
+# Ordinals: 1st, 2nd, 3rd, 4th, ... Edited by Cursor (optim: non-capturing suffix).
+ORDINAL_RE = re.compile(r"\b\d+(?:st|nd|rd|th)\b", re.IGNORECASE)
 # Section/paragraph symbols and "Section N"
 SECTION_RE = re.compile(r"(§|¶|\bSection\s+\d+[\w\(\)\-]*)", re.IGNORECASE)
 # ALL-CAPS acronyms (2-5 letters); exclude common 2-letter words
@@ -51,8 +51,8 @@ ACRONYM_STOPLIST = frozenset(
         "AN",
     }
 )
-# Currency: $N or $N.NN
-CURRENCY_RE = re.compile(r"\$[\d,]+(?:\.[\d]+)?")
+# Currency: $N or £N (or with decimals). Edited by Cursor (TDD item 1).
+CURRENCY_RE = re.compile(r"[$£][\d,]+(?:\.[\d]+)?")
 # Historical years 1000-1899 (19xx/20xx in years)
 HISTORICAL_YEAR_RE = re.compile(r"\b(1[0-8]\d{2})\b")
 # Unspoken header phrases (literal substrings)
@@ -74,12 +74,12 @@ NO_DOT_NEXT_RE = re.compile(r"\bNo\.\s+(\S+)", re.IGNORECASE)
 NO_DOT_CITATION_RE = re.compile(r"\bNo\.\s+(\d+-\d+)", re.IGNORECASE)
 # Vote tally: single digit - single digit (9-0, 7-2); separate from case IDs
 VOTE_TALLY_RE = re.compile(r"\b(\d-\d)\b")
-# Roman numerals (legal: Amendment VII, Title II); exclude single I
-ROMAN_NUMERAL_RE = re.compile(r"\b(II|III|IV|V|VI|VII|VIII|IX|X|XI|XII)\b")
-# Percentages: 50% or 25 percent
-PERCENTAGE_RE = re.compile(r"\d+%|\d+\s*percent")
-# Decades: 1980s, 1930s; abbreviated 20s, 50s, 10s. Edited by Cursor.
-DECADE_RE = re.compile(r"\b(?:(18|19|20)\d{2}s|\d{2}s)\b")
+# Roman numerals (legal: Amendment VII, Title II); exclude single I. Edited by Cursor (optim: longest-first alternation).
+ROMAN_NUMERAL_RE = re.compile(r"\b(VIII|VII|XII|XI|III|IX|VI|IV|II|V|X)\b")
+# Percentages: 50% or 25 percent. Edited by Cursor (optim: factor \d+ once).
+PERCENTAGE_RE = re.compile(r"\d+(?:%|\s*percent)")
+# Decades: 1980s, 1930s; abbreviated 20s, 50s, 10s. Edited by Cursor (optim: non-capturing prefix).
+DECADE_RE = re.compile(r"\b(?:(?:18|19|20)\d{2}s|\d{2}s)\b")
 # Et al. (legal abbreviation)
 ET_AL_RE = re.compile(r"\bet\s+al\.?", re.IGNORECASE)
 # Word ordinals: Fifth, Seventh, Eighth (Circuit, Amendment)
@@ -100,9 +100,13 @@ AWARENESS_SYMBOLS = ("\u2026", "\u2013", "\u2014", "\u2020", "\u2021", "\u2022")
 BRACKETS_PAREN_RE = re.compile(r"\(([^)]*)\)")
 BRACKETS_SQUARE_RE = re.compile(r"\[([^\]]*)\]")
 BRACKETS_CURLY_RE = re.compile(r"\{([^}]*)\}")
+# TDD plan item 8: angle brackets <...>
+BRACKETS_ANGLE_RE = re.compile(r"<[^>]*>")
 BRACKETS_NUMBERED_RE = re.compile(r"\b\d+\)")
 # Awareness: leading decimals (.66, .5) — may be pronounced "point six six".
 LEADING_DECIMAL_RE = re.compile(r"(?<!\d)(\.\d+)")
+# TDD plan item 11: time-like (12:34, 00:35:34, 9:38.5) — awareness only.
+TIME_LIKE_RE = re.compile(r"\b\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?\b")
 # Editorial [= X]: replace with normalized X then strip. Edited by Cursor.
 EDITORIAL_SQUARE_RE = re.compile(r"\[=\s*([^\]]*)\]")
 # Dash range N-M (en/em dash or hyphen) for "N to M" rule.
@@ -114,7 +118,8 @@ STRUCTURAL_PAREN_NUM_RE = re.compile(r"\((\d{1,2})\)")
 _NON_SPEECH_CONTENT_RE = re.compile(
     r"(?i)^(inaudible|voice\s*overlap|laughter|coughing|audio\s*cut|"
     r"recess|dollars|noise|ph|indiscernible|mirth|sneezes|sighs|"
-    r"applause|break|luncheon|lunch|interruption|banging|attempt\s*to\s*laughter)"
+    r"applause|break|luncheon|lunch|interruption|banging|attempt\s*to\s*laughter|"
+    r"laughter\s*attempt)"  # TDD plan item 2
     r"\.?$"
 )
 # Max length for bracket content stored in report (avoid huge keys).
@@ -261,6 +266,12 @@ def collect_from_text(text: str, artifacts: dict[str, Counter[str]]) -> None:
     for m in BRACKETS_NUMBERED_RE.finditer(text):
         artifacts["awareness_brackets_numbered"][m.group(0)] += 1
         artifacts["numbered_list_marker"][m.group(0)] += 1
+    # TDD plan item 8: angle brackets <...>
+    for m in BRACKETS_ANGLE_RE.finditer(text):
+        key = m.group(0)
+        if len(key) > _BRACKET_CONTENT_MAX + 2:
+            key = key[: _BRACKET_CONTENT_MAX + 1] + "...>"
+        artifacts["awareness_brackets_angle"][key] += 1
     # Editorial [= X] (replace with normalized X then strip).
     for m in EDITORIAL_SQUARE_RE.finditer(text):
         artifacts["editorial_square_bracket"][m.group(0)] += 1
@@ -277,6 +288,9 @@ def collect_from_text(text: str, artifacts: dict[str, Counter[str]]) -> None:
         artifacts["structural_bracket"][m.group(0)] += 1
     for m in STRUCTURAL_PAREN_NUM_RE.finditer(text):
         artifacts["structural_bracket"][m.group(0)] += 1
+    # TDD plan item 11: time-like (12:34, 00:35:34, 9:38.5)
+    for m in TIME_LIKE_RE.finditer(text):
+        artifacts["awareness_time_like"][m.group(0)] += 1
     # Awareness: leading decimals (.66, .5) — "point six six".
     for m in LEADING_DECIMAL_RE.finditer(text):
         frag = m.group(1)
@@ -336,6 +350,8 @@ _CATEGORIES = frozenset(
         "awareness_brackets_square",
         "awareness_brackets_curly",
         "awareness_brackets_numbered",
+        "awareness_brackets_angle",  # TDD plan item 8
+        "awareness_time_like",  # TDD plan item 11
         "awareness_leading_decimal",
         "leading_decimal",
         "non_speech_brackets",

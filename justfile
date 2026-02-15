@@ -38,3 +38,11 @@ rule-candidates:
 # build awareness-only candidates (no normalization); writes data/awareness_*_candidates.json with corrections: [] (see docs §4.5)
 awareness-candidates:
     python -m scripts.build_awareness_candidates
+
+# regenerate awareness examples report (10 examples + context per category, uncovered-only); writes docs/awareness_examples_report.md
+awareness-report *ARGS:
+    python -m scripts.awareness_examples_report -o docs/awareness_examples_report.md {{ARGS}}
+
+# build legal words list from LexPredict + Open Legal Dictionary; writes data/legal_words.txt (see docs/legal_dictionary.md)
+legal-dict:
+    python -m scripts.build_legal_dict

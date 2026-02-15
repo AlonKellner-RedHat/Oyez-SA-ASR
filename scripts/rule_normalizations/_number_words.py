@@ -125,10 +125,35 @@ def number_to_ordinal(n: int) -> str:
     return str(n)
 
 
-def roman_to_int(s: str) -> int | None:
-    """Roman numeral II-XII -> int; single I excluded per collect_asr_artifacts."""
-    if not s or s == "I":
+# Edited by Cursor (fraction denominators: half, third, fourth, ...)
+FRACTION_DENOMINATORS: dict[int, tuple[str, str]] = {
+    2: ("half", "halves"),
+    3: ("third", "thirds"),
+    4: ("fourth", "fourths"),
+    5: ("fifth", "fifths"),
+    6: ("sixth", "sixths"),
+    7: ("seventh", "sevenths"),
+    8: ("eighth", "eighths"),
+    9: ("ninth", "ninths"),
+    10: ("tenth", "tenths"),
+}
+
+
+def fraction_denominator_word(denom: int, numerator: int) -> str | None:
+    """Spoken denominator for fraction (e.g. 3, 1 -> 'third'; 5, 2 -> 'fifths'). Returns None if unsupported."""
+    if denom not in FRACTION_DENOMINATORS:
         return None
+    singular, plural = FRACTION_DENOMINATORS[denom]
+    return singular if numerator == 1 else plural
+
+
+def roman_to_int(s: str) -> int | None:
+    """Roman numeral I-XII -> int (single I = 1 for roman_parens context)."""
+    if not s:
+        return None
+    s = s.strip().upper()
+    if s == "I":
+        return 1
     val = 0
     prev = 0
     for c in s:

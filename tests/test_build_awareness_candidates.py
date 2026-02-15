@@ -6,6 +6,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+from scripts.dictionary_loader import set_allow_no_enchant
+
+pytestmark = pytest.mark.slow
+
 
 def _run_build_awareness_candidates(
     transcripts_dir: Path,
@@ -21,6 +27,7 @@ def _run_build_awareness_candidates(
         str(transcripts_dir),
         "-o",
         str(output_dir),
+        "--allow-no-enchant",
     ]
     result = subprocess.run(  # noqa: S603
         cmd,
@@ -87,3 +94,329 @@ def test_build_awareness_candidates_output_has_unified_schema_no_corrections(
         assert "path" in occ
         assert "line_num" in occ
         assert "start_index" in occ
+
+
+# Plan: awareness non-dictionary
+def test_build_awareness_candidates_non_dictionary(tmp_path: Path) -> None:
+    """Transcript with befair, supremecourt, the18th produces awareness_non_dictionary; the, court do not."""
+    transcripts_dir = tmp_path / "transcripts"
+    transcripts_dir.mkdir()
+    fixture = transcripts_dir / "sample" / "oral_argument.json"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        json.dumps(
+            {
+                "metadata": {},
+                "turns": [
+                    {
+                        "index": 0,
+                        "text": "the court befair supremecourt the18th June22nd",
+                    },
+                ],
+            },
+            indent=2,
+        )
+    )
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    _run_build_awareness_candidates(
+        transcripts_dir, out_dir, cwd=Path(__file__).resolve().parents[1]
+    )
+    path = out_dir / "awareness_non_dictionary_candidates.json"
+    assert path.exists(), list(out_dir.iterdir())
+    data = json.loads(path.read_text())
+    candidates = data.get("candidates", [])
+    spans = [c.get("span") for c in candidates]
+    assert "befair" in spans, spans
+    assert "supremecourt" in spans, spans
+    assert "the" not in spans, spans
+    assert "court" not in spans, spans
+    assert "the18th" in spans, spans
+    # Awareness does not suggest corrections; split "the 18th" comes from rule concatenated_word_split.
+    cand_18 = next(c for c in candidates if c.get("span") == "the18th")
+    assert cand_18.get("corrections") == [], cand_18.get("corrections")
+
+
+# Plan: awareness non-dictionary with punctuation and 4+ span check
+def test_build_awareness_candidates_non_dictionary_punctuation_and_4plus(
+    tmp_path: Path,
+) -> None:
+    """action,, Right., second-guess, days?, don't, e.g. not flagged; xyzqq flagged."""
+    transcripts_dir = tmp_path / "transcripts"
+    transcripts_dir.mkdir()
+    fixture = transcripts_dir / "sample" / "oral_argument.json"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        json.dumps(
+            {
+                "metadata": {},
+                "turns": [
+                    {
+                        "index": 0,
+                        "text": "action, Right. second-guess days? don't e.g. xyzqq",
+                    },
+                ],
+            },
+            indent=2,
+        )
+    )
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    _run_build_awareness_candidates(
+        transcripts_dir, out_dir, cwd=Path(__file__).resolve().parents[1]
+    )
+    path = out_dir / "awareness_non_dictionary_candidates.json"
+    assert path.exists(), list(out_dir.iterdir())
+    data = json.loads(path.read_text())
+    candidates = data.get("candidates", [])
+    spans = [c.get("span") for c in candidates]
+    assert "action," not in spans, spans
+    assert "Right." not in spans, spans
+    assert "second-guess" not in spans, spans
+    assert "days?" not in spans, spans
+    assert "e.g." not in spans, spans
+    assert "xyzqq" in spans, spans
+    # don't: single span "don't" (5 chars); if in dic then not in spans (web2 may not have it)
+
+
+# Awareness does not suggest corrections; rules do. Edited by Cursor.
+def test_build_awareness_candidates_non_dictionary_no_split_correction(
+    tmp_path: Path,
+) -> None:
+    """Invalid span hedid: awareness has no corrections (split comes from rule concatenated_word_split)."""
+    transcripts_dir = tmp_path / "transcripts"
+    transcripts_dir.mkdir()
+    fixture = transcripts_dir / "sample" / "oral_argument.json"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        json.dumps(
+            {"metadata": {}, "turns": [{"index": 0, "text": "hedid"}]},
+            indent=2,
+        )
+    )
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    _run_build_awareness_candidates(
+        transcripts_dir, out_dir, cwd=Path(__file__).resolve().parents[1]
+    )
+    data = json.loads(
+        (out_dir / "awareness_non_dictionary_candidates.json").read_text()
+    )
+    candidates = data.get("candidates", [])
+    cand = next((c for c in candidates if c.get("span") == "hedid"), None)
+    assert cand is not None, [c.get("span") for c in candidates]
+    assert cand.get("corrections") == [], cand.get("corrections")
+
+
+# TDD plan item 8: angle brackets <> awareness
+def test_build_awareness_candidates_angle_brackets(tmp_path: Path) -> None:
+    """Fixture with '<foo>' yields awareness output including angle bracket category and span."""
+    transcripts_dir = tmp_path / "transcripts"
+    transcripts_dir.mkdir()
+    fixture = transcripts_dir / "sample" / "oral_argument.json"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        json.dumps(
+            {
+                "metadata": {},
+                "turns": [{"index": 0, "text": "See <foo> here."}],
+            },
+            indent=2,
+        )
+    )
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    _run_build_awareness_candidates(
+        transcripts_dir, out_dir, cwd=Path(__file__).resolve().parents[1]
+    )
+    path = out_dir / "awareness_brackets_angle_candidates.json"
+    assert path.exists(), list(out_dir.iterdir())
+    data = json.loads(path.read_text())
+    assert data.get("rule_id") == "awareness_brackets_angle"
+    candidates = data.get("candidates", [])
+    spans = [c.get("span") for c in candidates]
+    assert "<foo>" in spans, spans
+
+
+# TDD plan item 11: time-like awareness
+def test_build_awareness_candidates_time_like(tmp_path: Path) -> None:
+    """Fixture 'at 12:34 and 00:35:34 and 9:38.5' yields awareness_time_like category and those spans."""
+    transcripts_dir = tmp_path / "transcripts"
+    transcripts_dir.mkdir()
+    fixture = transcripts_dir / "sample" / "oral_argument.json"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        json.dumps(
+            {
+                "metadata": {},
+                "turns": [
+                    {"index": 0, "text": "At 12:34 and 00:35:34 and 9:38.5 here."},
+                ],
+            },
+            indent=2,
+        )
+    )
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    _run_build_awareness_candidates(
+        transcripts_dir, out_dir, cwd=Path(__file__).resolve().parents[1]
+    )
+    path = out_dir / "awareness_time_like_candidates.json"
+    assert path.exists(), list(out_dir.iterdir())
+    data = json.loads(path.read_text())
+    assert data.get("rule_id") == "awareness_time_like"
+    candidates = data.get("candidates", [])
+    spans = [c.get("span") for c in candidates]
+    assert "12:34" in spans, spans
+    assert "00:35:34" in spans, spans
+    assert "9:38.5" in spans, spans
+
+
+# Merge is a rule; awareness does not suggest corrections. Edited by Cursor.
+def test_build_awareness_candidates_merge_no_correction(tmp_path: Path) -> None:
+    """Non-dictionary span right (with next t.): awareness has no corrections (merge comes from rule split_word_merge)."""
+    transcripts_dir = tmp_path / "transcripts"
+    transcripts_dir.mkdir()
+    fixture = transcripts_dir / "sample" / "oral_argument.json"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        json.dumps(
+            {
+                "metadata": {},
+                "turns": [{"index": 0, "text": "That is right t."}],
+            },
+            indent=2,
+        )
+    )
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    _run_build_awareness_candidates(
+        transcripts_dir, out_dir, cwd=Path(__file__).resolve().parents[1]
+    )
+    path = out_dir / "awareness_non_dictionary_candidates.json"
+    assert path.exists(), list(out_dir.iterdir())
+    data = json.loads(path.read_text())
+    candidates = data.get("candidates", [])
+    cand_right = next((c for c in candidates if c.get("span") == "right"), None)
+    # If "right" is flagged (depends on dictionary), it must have no corrections (merge from rule). Edited by Cursor.
+    if cand_right is not None:
+        assert cand_right.get("corrections") == [], cand_right.get("corrections")
+
+
+# Stem-based validation: word whose stem is in dict is not flagged. Edited by Cursor.
+def test_awareness_does_not_flag_word_whose_stem_in_dict() -> None:
+    """With frozenset containing stem 'accommod', 'accommodation' is not emitted for awareness_non_dictionary."""
+    from scripts.build_awareness_candidates import _extract_awareness  # noqa: PLC0415
+
+    dic = frozenset(
+        {
+            "accommod",
+            "that",
+            "is",
+            "very",
+            "sympathetic",
+            "to",
+            "the",
+            "concern",
+            "venue",
+        }
+    )
+    text = "That is very sympathetic to the concern that venue accommodation"
+    out = _extract_awareness(text, dic=dic)
+    non_dict_spans = [
+        span for (cat, _si, span) in out if cat == "awareness_non_dictionary"
+    ]
+    assert "accommodation" not in non_dict_spans, non_dict_spans
+
+
+# Single-letter awareness (lowercase only, not a, not followed by period). Edited by Cursor.
+def test_awareness_single_letter_lowercase_only() -> None:
+    """Uppercase single letters (e.g. B in 'to B or a C') do not produce; lowercase e in 'e xecutive' does."""
+    from scripts.build_awareness_candidates import _extract_awareness  # noqa: PLC0415
+
+    set_allow_no_enchant(True)
+    out_upper = _extract_awareness("to B or a C")
+    single_upper = [
+        span for (cat, _si, span) in out_upper if cat == "awareness_single_letter"
+    ]
+    assert "B" not in single_upper, single_upper
+    out_lower = _extract_awareness("too much e xecutive")
+    single_lower = [
+        (cat, span)
+        for (cat, _si, span) in out_lower
+        if cat == "awareness_single_letter"
+    ]
+    assert ("awareness_single_letter", "e") in single_lower, single_lower
+
+
+def test_awareness_single_letter_emits_e_xecutive() -> None:
+    """'e xecutive' produces awareness_single_letter for token 'e'."""
+    from scripts.build_awareness_candidates import _extract_awareness  # noqa: PLC0415
+
+    set_allow_no_enchant(True)
+    out = _extract_awareness("too much e xecutive")
+    single = [
+        (cat, span) for (cat, _si, span) in out if cat == "awareness_single_letter"
+    ]
+    assert ("awareness_single_letter", "e") in single, single
+
+
+def test_awareness_single_letter_not_followed_by_period() -> None:
+    """'counse l.' does not produce awareness_single_letter for l. (token ends with period)."""
+    from scripts.build_awareness_candidates import _extract_awareness  # noqa: PLC0415
+
+    set_allow_no_enchant(True)
+    out = _extract_awareness("Thank you, counse l. I am very sympathetic.")
+    single = [span for (cat, _si, span) in out if cat == "awareness_single_letter"]
+    assert "l." not in single, single
+
+
+def test_awareness_single_letter_emits_t_you() -> None:
+    """'Yes, t you' produces awareness_single_letter for token 't'."""
+    from scripts.build_awareness_candidates import _extract_awareness  # noqa: PLC0415
+
+    set_allow_no_enchant(True)
+    out = _extract_awareness("Yes, t you")
+    single = [
+        (cat, span) for (cat, _si, span) in out if cat == "awareness_single_letter"
+    ]
+    assert ("awareness_single_letter", "t") in single, single
+
+
+def test_awareness_single_letter_not_in_brackets() -> None:
+    """'(e)' or '(x)' does not produce awareness_single_letter for letter inside parens."""
+    from scripts.build_awareness_candidates import _extract_awareness  # noqa: PLC0415
+
+    set_allow_no_enchant(True)
+    out = _extract_awareness("See (e) or (x) here.")
+    single = [span for (cat, _si, span) in out if cat == "awareness_single_letter"]
+    assert "e" not in single and "x" not in single, single
+
+
+def test_awareness_single_letter_not_adjacent_to_number() -> None:
+    """'5 t' or 't 5' does not produce awareness_single_letter for t (adjacent to digit token)."""
+    from scripts.build_awareness_candidates import _extract_awareness  # noqa: PLC0415
+
+    set_allow_no_enchant(True)
+    out1 = _extract_awareness("5 t here")
+    out2 = _extract_awareness("t 5 here")
+    single1 = [span for (cat, _si, span) in out1 if cat == "awareness_single_letter"]
+    single2 = [span for (cat, _si, span) in out2 if cat == "awareness_single_letter"]
+    assert "t" not in single1, single1
+    assert "t" not in single2, single2
+
+
+def test_awareness_single_letter_excludes_a_i_v_x() -> None:
+    """Single-letter a, i, v, x do not produce awareness_single_letter; e does (lowercase, no period)."""
+    from scripts.build_awareness_candidates import _extract_awareness  # noqa: PLC0415
+
+    set_allow_no_enchant(True)
+    out = _extract_awareness("a i v x e letter")
+    single = [span for (cat, _si, span) in out if cat == "awareness_single_letter"]
+    assert (
+        "a" not in single
+        and "i" not in single
+        and "v" not in single
+        and "x" not in single
+    ), single
+    assert "e" in single, single

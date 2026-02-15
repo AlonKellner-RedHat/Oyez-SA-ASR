@@ -318,6 +318,38 @@ class TestCollectAsrArtifactsNewCategories:
         assert "2)" in report["awareness_brackets_numbered"]
         assert "{note}" in report["awareness_brackets_curly"]
 
+    def test_awareness_brackets_angle_collected(self, tmp_path: Path) -> None:
+        """TDD plan item 8: text with <foo> increments awareness_brackets_angle."""
+        transcript = _minimal_transcript([{"text": "See <foo> and <bar>.", "index": 0}])
+        (tmp_path / "2022" / "21-1164").mkdir(parents=True)
+        (tmp_path / "2022" / "21-1164" / "oral_argument.json").write_text(
+            json.dumps(transcript)
+        )
+        report = _run_script(tmp_path)
+        assert "awareness_brackets_angle" in report
+        assert "<foo>" in report["awareness_brackets_angle"]
+        assert "<bar>" in report["awareness_brackets_angle"]
+
+    def test_awareness_time_like_collected(self, tmp_path: Path) -> None:
+        """TDD plan item 11: text with 12:34, 00:35:34, 9:38.5 increments awareness_time_like."""
+        transcript = _minimal_transcript(
+            [
+                {
+                    "text": "At 12:34 and 00:35:34 and 9:38.5 we saw it.",
+                    "index": 0,
+                }
+            ]
+        )
+        (tmp_path / "2022" / "21-1164").mkdir(parents=True)
+        (tmp_path / "2022" / "21-1164" / "oral_argument.json").write_text(
+            json.dumps(transcript)
+        )
+        report = _run_script(tmp_path)
+        assert "awareness_time_like" in report
+        assert "12:34" in report["awareness_time_like"]
+        assert "00:35:34" in report["awareness_time_like"]
+        assert "9:38.5" in report["awareness_time_like"]
+
     def test_awareness_leading_decimal_collected(self, tmp_path: Path) -> None:
         """Leading decimal .66 yields awareness_leading_decimal (point six six)."""
         transcript = _minimal_transcript(

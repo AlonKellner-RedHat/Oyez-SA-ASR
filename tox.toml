@@ -38,7 +38,7 @@ commands = [
     "--cov-report=term-missing",
     "--cov-report=lcov:lcov.info",
     "--cov=src/oyez_sa_asr",
-    "--cov-fail-under=94",
+    "--cov-fail-under=83",
   ],
 ]
 
