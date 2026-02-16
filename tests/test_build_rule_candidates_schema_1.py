@@ -1,0 +1,146 @@
+# Edited by Cursor: split from test_build_rule_candidates for lintok.
+"""Integration tests: schema and early rules (1/3) (split_word_merge, latin, quote, parens, dash, non_speech)."""
+
+import json
+from pathlib import Path
+
+import pytest
+
+from tests.test_build_rule_candidates_common import run_build_rule_candidates
+
+pytestmark = pytest.mark.slow
+
+
+def test_build_rule_candidates_output_has_unified_schema(tmp_path: Path) -> None:
+    """Run build_rule_candidates on a small fixture; assert output has rule_id, span, corrections, occurrences with path, line_num, start_index."""
+    transcripts_dir = tmp_path / "transcripts"
+    transcripts_dir.mkdir()
+    fixture = transcripts_dir / "sample" / "oral_argument.json"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        json.dumps(
+            {
+                "metadata": {},
+                "turns": [
+                    {"index": 0, "text": "The vote was 9-0."},
+                    {"index": 1, "text": "In 1999 we had VII."},
+                    {"index": 2, "text": "About 50% and 1980s."},
+                ],
+            },
+            indent=2,
+        )
+    )
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    run_build_rule_candidates(
+        transcripts_dir, out_dir, cwd=Path(__file__).resolve().parents[1]
+    )
+
+    vote_path = out_dir / "vote_tally_candidates.json"
+    assert vote_path.exists(), list(out_dir.iterdir())
+    vote_data = json.loads(vote_path.read_text())
+    assert vote_data.get("rule_id") == "vote_tally"
+    assert "rule_name" in vote_data
+    candidates = vote_data.get("candidates", [])
+    assert candidates
+    c = candidates[0]
+    assert "span" in c
+    assert "corrections" in c
+    assert "occurrences" in c
+    for occ in c["occurrences"]:
+        assert "path" in occ
+        assert "line_num" in occ
+        assert "start_index" in occ
+
+    years_path = out_dir / "years_candidates.json"
+    assert years_path.exists()
+    years_data = json.loads(years_path.read_text())
+    assert years_data.get("rule_id") == "years"
+    assert any(
+        "1999" in cand.get("span", "") for cand in years_data.get("candidates", [])
+    )
+
+
+# Merge as rule: two invalid tokens -> one candidate with merged correction. Edited by Cursor.
+def test_build_rule_candidates_split_word_merge(tmp_path: Path) -> None:
+    """Transcript 'That was wro ng.' yields split_word_merge candidate with span covering both tokens and correction 'wrong'."""
+    transcripts_dir = tmp_path / "transcripts"
+    transcripts_dir.mkdir()
+    fixture = transcripts_dir / "sample" / "oral_argument.json"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        json.dumps(
+            {
+                "metadata": {},
+                "turns": [{"index": 0, "text": "That was wro ng."}],
+            },
+            indent=2,
+        )
+    )
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    run_build_rule_candidates(
+        transcripts_dir, out_dir, cwd=Path(__file__).resolve().parents[1]
+    )
+    path = out_dir / "split_word_merge_candidates.json"
+    assert path.exists(), list(out_dir.iterdir())
+    data = json.loads(path.read_text())
+    assert data.get("rule_id") == "split_word_merge"
+    candidates = data.get("candidates", [])
+    assert candidates, data
+    cand = next(
+        (
+            c
+            for c in candidates
+            if "wro" in c.get("span", "") and "ng" in c.get("span", "")
+        ),
+        None,
+    )
+    assert cand is not None, [c.get("span") for c in candidates]
+    # Full span (prev through next) when at least one merge valid. Edited by Cursor.
+    assert cand["span"] == "was wro ng.", cand["span"]
+    texts = [
+        co.get("text") for co in cand.get("corrections", []) if "text" in (co or {})
+    ]
+    assert "wrong" in texts or any("wrong" in t for t in texts), cand.get("corrections")
+
+
+def test_build_rule_candidates_latin_extended_output(tmp_path: Path) -> None:
+    """Fixture with word containing accented char (e.g. café); assert latin_extended_candidates.json has corrections with text and optional method."""
+    transcripts_dir = tmp_path / "transcripts"
+    transcripts_dir.mkdir()
+    fixture = transcripts_dir / "sample" / "oral_argument.json"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text(
+        json.dumps(
+            {
+                "metadata": {},
+                "turns": [
+                    {"index": 0, "text": "We had café and tea."},
+                ],
+            },
+            indent=2,
+        )
+    )
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    run_build_rule_candidates(
+        transcripts_dir, out_dir, cwd=Path(__file__).resolve().parents[1]
+    )
+
+    latin_path = out_dir / "latin_extended_candidates.json"
+    assert latin_path.exists(), list(out_dir.iterdir())
+    latin_data = json.loads(latin_path.read_text())
+    assert latin_data.get("rule_id") == "latin_extended"
+    candidates = latin_data.get("candidates", [])
+    assert candidates, "expected at least one latin_extended candidate"
+    cafe_cand = next((c for c in candidates if c.get("span") == "café"), None)
+    assert cafe_cand is not None, [c.get("span") for c in candidates]
+    corrections = cafe_cand.get("corrections", [])
+    assert corrections
+    for corr in corrections:
+        assert "text" in corr
+        assert isinstance(corr.get("text"), str)
+    first = corrections[0]
+    assert first.get("method") == "simple_map"
+    assert first.get("text") == "cafe"
