@@ -1,0 +1,120 @@
+# Edited by Cursor: split from test_cli_process_speakers (lintok; plan).
+"""Tests for process speakers basic and aggregation (TestProcessSpeakersBasic, TestProcessSpeakersAggregation)."""
+
+import json
+import tempfile
+from pathlib import Path
+
+from oyez_sa_asr.cli import app
+from tests.test_cli_process_speakers_helpers import (
+    _create_case,
+    _create_transcript,
+    _strip_ansi,
+    runner,
+)
+
+
+class TestProcessSpeakersBasic:
+    """Tests for basic speaker processing."""
+
+    def test_processes_speakers_from_transcripts(self) -> None:
+        """Aggregates speakers from transcript files."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir)
+            transcripts_dir = data_dir / "transcripts" / "2024" / "23-1234"
+            transcripts_dir.mkdir(parents=True)
+            transcript = _create_transcript("2024", "23-1234")
+            (transcripts_dir / "oral_argument.json").write_text(json.dumps(transcript))
+            cases_dir = data_dir / "cases" / "2024"
+            cases_dir.mkdir(parents=True)
+            case = _create_case("2024", "23-1234", "Smith v. Jones")
+            (cases_dir / "23-1234.json").write_text(json.dumps(case))
+            output_dir = data_dir / "speakers"
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "speakers",
+                    "--transcripts-dir",
+                    str(data_dir / "transcripts"),
+                    "--cases-dir",
+                    str(data_dir / "cases"),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+            )
+            assert result.exit_code == 0
+            output = _strip_ansi(result.output)
+            assert "processed" in output.lower() or "done" in output.lower()
+            other_files = list((output_dir / "other").glob("*.json"))
+            assert len(other_files) == 2
+            smith_file = output_dir / "other" / "123_justice_smith.json"
+            assert smith_file.exists()
+            with smith_file.open() as f:
+                smith_data = json.load(f)
+            assert smith_data["id"] == 123
+            assert smith_data["name"] == "Justice Smith"
+            assert smith_data["role"] == "other"
+            assert smith_data["totals"]["turns"] == 1
+            jones_file = output_dir / "other" / "456_mr_jones.json"
+            assert jones_file.exists()
+            with jones_file.open() as f:
+                jones_data = json.load(f)
+            assert jones_data["role"] == "other"
+
+
+class TestProcessSpeakersAggregation:
+    """Tests for speaker aggregation across multiple recordings."""
+
+    def test_aggregates_across_multiple_transcripts(self) -> None:
+        """Combines speaker data from multiple transcripts."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir)
+            transcripts_dir = data_dir / "transcripts"
+            cases_dir = data_dir / "cases"
+            output_dir = data_dir / "speakers"
+            for docket in ["23-1234", "23-5678"]:
+                t_dir = transcripts_dir / "2024" / docket
+                t_dir.mkdir(parents=True)
+                transcript = _create_transcript(
+                    "2024",
+                    docket,
+                    turns=[
+                        {
+                            "index": 0,
+                            "speaker_id": 123,
+                            "speaker_name": "Justice Smith",
+                            "start": 0.0,
+                            "stop": 10.0,
+                            "duration": 10.0,
+                            "is_valid": True,
+                            "word_count": 50,
+                            "text": "Test.",
+                        }
+                    ],
+                )
+                (t_dir / "oral_argument.json").write_text(json.dumps(transcript))
+                c_dir = cases_dir / "2024"
+                c_dir.mkdir(parents=True, exist_ok=True)
+                case = _create_case("2024", docket)
+                (c_dir / f"{docket}.json").write_text(json.dumps(case))
+            result = runner.invoke(
+                app,
+                [
+                    "process",
+                    "speakers",
+                    "--transcripts-dir",
+                    str(transcripts_dir),
+                    "--cases-dir",
+                    str(cases_dir),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+            )
+            assert result.exit_code == 0
+            smith_file = output_dir / "other" / "123_justice_smith.json"
+            with smith_file.open() as f:
+                smith_data = json.load(f)
+            assert smith_data["totals"]["recordings"] == 2
+            assert smith_data["totals"]["cases"] == 2
+            assert smith_data["totals"]["turns"] == 2

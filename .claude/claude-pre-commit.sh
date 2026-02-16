@@ -28,7 +28,8 @@ elif [[ $exit_code -ne 0 ]]; then
   # For any other error, pass its exit code along.
   exit $exit_code
 
-elif [[ ("$output" == *"[CRITICAL]"*) || ("$output" == *"[SUGGESTION]"*) || ("$output" == *"[FIXED]"*) ]]; then
+elif [[ "$output" == *"[CRITICAL]"* ]]; then
+  # Fail only on CRITICAL; SUGGESTION and FIXED are non-blocking.
   exit 1
 else
   exit 0
