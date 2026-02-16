@@ -71,6 +71,26 @@ class TestFilterUtterances:
         assert len(filtered) == 1
         assert stats.abnormal_wpm == 1
 
+    def test_calculate_wpm_returns_zero_when_duration_zero(self) -> None:
+        """WPM 0 when duration_sec <= 0 (line 36)."""
+        u = [make_utterance(0, 0, 0), make_utterance(10, 20, 20)]
+        filtered, stats = filter_utterances(u)
+        assert len(filtered) == 2 and stats.total == 2
+
+    def test_invalid_timestamps_duration_mismatch(self) -> None:
+        """Duration mismatch invalid (line 51)."""
+        u = [make_utterance(0, 10, 10)]
+        u[0]["duration_sec"] = 5.0
+        filtered, stats = filter_utterances(u)
+        assert len(filtered) == 0 and stats.invalid_timestamps == 1
+
+    def test_too_long_ratio_skipped_when_recording_duration_zero(self) -> None:
+        """recording_dur <= 0 skips too_long check (line 140)."""
+        u = [make_utterance(0, 0, 0)]
+        u[0]["duration_sec"] = 0.0
+        _, stats = filter_utterances(u)
+        assert stats.total == 1
+
     def test_abnormal_wpm_high_filtered(self) -> None:
         """WPM > 600 filtered."""
         utterances = [

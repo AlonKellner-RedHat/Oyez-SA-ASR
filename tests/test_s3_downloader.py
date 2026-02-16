@@ -3,7 +3,7 @@
 
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from botocore.exceptions import ClientError
@@ -178,6 +178,32 @@ class TestS3DownloaderFetch:
             assert result.success is False
             assert result.status_code == 404
             assert "NoSuchKey" in str(result.error)
+
+    @pytest.mark.asyncio
+    async def test_fetch_caches_expected_unavailable_403(self) -> None:
+        """403 triggers _cache_unavailable (s3_downloader lines 209-210)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            downloader = S3Downloader(Path(tmpdir))
+            request = RequestMetadata(
+                url="https://s3.amazonaws.com/bucket/forbidden.mp3"
+            )
+            mock_client = MagicMock()
+            mock_client.get_object = AsyncMock(
+                side_effect=ClientError(
+                    {
+                        "Error": {"Code": "AccessDenied"},
+                        "ResponseMetadata": {"HTTPStatusCode": 403},
+                    },
+                    "GetObject",
+                )
+            )
+            with patch.object(
+                downloader, "_cache_unavailable", wraps=downloader._cache_unavailable
+            ) as mock_cache:
+                result = await downloader.fetch(mock_client, request)
+                assert result.success is False
+                assert result.status_code == 403
+                mock_cache.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_create_client(self) -> None:

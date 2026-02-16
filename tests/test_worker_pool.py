@@ -4,6 +4,7 @@
 import asyncio
 import tempfile
 import time
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -204,8 +205,8 @@ class TestWorkerPool:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 pool = WorkerPool(downloader, client, min_improvement=0.25)
                 pool.spawn_workers(1)
-                # Set rate window start to current time to make elapsed <= 0
-                pool._rate_window_start = time.monotonic()
+                # Set rate window start in future so elapsed <= 0 (line 109)
+                pool._rate_window_start = time.monotonic() + 1.0
                 pool._rate_window_count = 10
 
                 # Record a result - should handle elapsed <= 0 gracefully
@@ -226,8 +227,24 @@ class TestWorkerPool:
             fetcher = AdaptiveFetcher.create(Path(tmpdir))
             downloader = fetcher.downloader
             request_queue: asyncio.Queue[RequestMetadata | None] = asyncio.Queue()
-            result_queue: asyncio.Queue[tuple[int, FetchResult]] = asyncio.Queue()
             shutdown_event = asyncio.Event()
+
+            # Queue that sets shutdown when worker puts result so line 197 is hit
+            def on_put() -> None:
+                shutdown_event.set()
+
+            class NotifyingQueue(asyncio.Queue[tuple[int, FetchResult]]):
+                def __init__(self, callback: Callable[[], None]) -> None:
+                    super().__init__()
+                    self._on_put = callback
+
+                async def put(self, item: tuple[int, FetchResult]) -> None:
+                    await super().put(item)
+                    self._on_put()
+
+            result_queue: asyncio.Queue[tuple[int, FetchResult]] = NotifyingQueue(
+                on_put
+            )
 
             request = RequestMetadata(url=f"{TEST_URL}/1")
             await request_queue.put(request)
@@ -239,7 +256,6 @@ class TestWorkerPool:
                 return_value=_make_mock_response(),
             ):
                 async with httpx.AsyncClient(timeout=30.0) as client:
-                    # Set shutdown after putting request
                     task = asyncio.create_task(
                         _worker_coroutine(
                             1,
@@ -250,13 +266,9 @@ class TestWorkerPool:
                             shutdown_event,
                         )
                     )
-                    # Wait a bit then set shutdown
-                    await asyncio.sleep(0.1)
-                    shutdown_event.set()
                     await task
 
-            # Should have processed the request before exiting (line 197)
-            assert result_queue.qsize() >= 0
+            assert result_queue.qsize() == 1
 
     @pytest.mark.asyncio
     async def test_scale_up_handles_elapsed_zero(self) -> None:

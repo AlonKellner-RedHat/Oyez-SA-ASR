@@ -65,6 +65,26 @@ class TestExtractAudioUrls:
         urls = extract_audio_urls(Path("/nonexistent/path"))
         assert urls == []
 
+    def test_extract_audio_urls_filters_by_terms(self) -> None:
+        """Only scan term dirs in terms list (parser_transcripts line 251)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            transcripts_dir = Path(tmpdir)
+            for term in ("2023", "2024"):
+                term_dir = transcripts_dir / term / "22-123"
+                term_dir.mkdir(parents=True)
+                transcript = {
+                    "metadata": {
+                        "audio_urls": {
+                            "mp3": f"https://example.com/{term}/audio.mp3",
+                        }
+                    }
+                }
+                (term_dir / "oral_argument.json").write_text(json.dumps(transcript))
+
+            urls = extract_audio_urls(transcripts_dir, terms=["2024"])
+            assert len(urls) == 1
+            assert "2024" in urls[0]
+
     def test_deduplicates_urls(self) -> None:
         """Deduplicate URLs across multiple transcripts."""
         with tempfile.TemporaryDirectory() as tmpdir:

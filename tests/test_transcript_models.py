@@ -4,8 +4,9 @@
 import json
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
+from oyez_sa_asr.scraper import transcript_models
 from oyez_sa_asr.scraper.parser_transcripts import (
     ProcessedTranscript,
     build_transcript_to_case_map,
@@ -68,6 +69,29 @@ class TestBuildCaseMap:
         with tempfile.TemporaryDirectory() as tmpdir:
             case_map = build_transcript_to_case_map(Path(tmpdir))
             assert case_map == {}
+
+    def test_build_transcript_to_case_map_filters_by_terms(self) -> None:
+        """Only scan term dirs in terms list (parser_transcripts line 203)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cases_dir = Path(tmpdir)
+            for term in ("2023", "2024"):
+                term_dir = cases_dir / term
+                term_dir.mkdir()
+                case_data = {
+                    "term": term,
+                    "docket_number": "22-123",
+                    "oral_arguments": [
+                        {"id": 1000 + int(term), "href": f"https://example.com/{term}"}
+                    ],
+                    "opinion_announcements": [],
+                }
+                (term_dir / "22-123.json").write_text(json.dumps(case_data))
+
+            case_map = build_transcript_to_case_map(cases_dir, terms=["2024"])
+            # Map key is transcript ID (oral_arguments[].id), not term
+            assert 3024 in case_map
+            assert case_map[3024] == ("2024", "22-123")
+            assert 3023 not in case_map
 
 
 class TestProcessedTranscript:
@@ -166,6 +190,34 @@ class TestProcessedTranscript:
         assert t.metadata["audio_urls"]["mp3"] == "https://example.com/a.mp3"
         assert t.metadata["audio_urls"]["ogg"] == "https://example.com/a.ogg"
         assert t.metadata["audio_urls"]["hls"] == "https://example.com/a.m3u8"
+
+    def test_extract_audio_urls_skips_falsy_media_file_entries(self) -> None:
+        """Falsy media_file entries are skipped (transcript_models line 32)."""
+        # Intentionally pass list with falsy elements to hit the "if not mf" branch
+        raw_list: list[dict[str, Any] | None] = [
+            {"mime": "audio/mpeg", "href": "https://example.com/audio.mp3"},
+            None,
+            {},
+        ]
+        result = transcript_models._extract_audio_urls(
+            cast("list[dict[str, Any]] | None", raw_list)
+        )
+        assert result["mp3"] == "https://example.com/audio.mp3"
+
+    def test_get_filename_without_speaker(self) -> None:
+        """get_filename returns type-only name when speaker is None (line 178)."""
+        # Use class from transcript_models so get_filename (line 178) is covered
+        t = transcript_models.ProcessedTranscript(
+            id=1,
+            case_docket="21-476",
+            term="2022",
+            type="oral_argument",
+            speaker=None,
+            title="Oral Argument",
+            metadata={},
+            turns=[],
+        )
+        assert t.get_filename() == "oral_argument.json"
 
     def test_save_creates_file(self) -> None:
         """Save creates JSON file in correct location."""

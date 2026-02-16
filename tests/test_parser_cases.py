@@ -153,6 +153,29 @@ class TestExtractMediaUrls:
             # Should only extract from valid directories, skip non-directories
             assert len(urls) == 1
 
+    def test_extract_media_urls_filters_by_terms(self) -> None:
+        """Should only scan term dirs in term_set (parser_cases line 45)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cases_dir = Path(tmpdir)
+            for term in ("2023", "2024"):
+                term_dir = cases_dir / term
+                term_dir.mkdir()
+                case = {
+                    "id": 1,
+                    "oral_arguments": [
+                        {
+                            "href": f"https://example.com/{term}/audio.mp3",
+                            "unavailable": False,
+                        }
+                    ],
+                    "opinion_announcements": [],
+                }
+                (term_dir / "22-123.json").write_text(json.dumps(case))
+
+            urls = extract_media_urls(cases_dir, terms=["2024"])
+            assert len(urls) == 1
+            assert "2024" in urls[0]
+
     def test_extract_media_urls_handles_exceptions(self) -> None:
         """Should handle JSONDecodeError, KeyError, TypeError (lines 60-61)."""
         with tempfile.TemporaryDirectory() as tmpdir:
