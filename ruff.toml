@@ -32,3 +32,6 @@ ignore = [
 ]
 pydocstyle.convention = "numpy"
 pylint.max-args = 10
+# Edited by Cursor: allow test functions/methods without docstrings (D102, D103).
+[lint.per-file-ignores]
+"tests/**/*.py" = ["D102", "D103"]

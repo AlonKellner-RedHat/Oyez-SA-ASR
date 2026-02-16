@@ -9,7 +9,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from oyez_sa_asr.cli import app
-from oyez_sa_asr.cli_process import _get_term_from_raw
+from oyez_sa_asr.cli_process_cases import _get_term_from_raw
 
 runner = CliRunner()
 
