@@ -17,7 +17,7 @@ from scripts.build_awareness_helpers import (
     _in_brackets,
     _is_valid_word_for_non_dictionary,
 )
-from scripts.collect_asr_artifacts import (
+from scripts.collect_asr_artifacts_regex import (
     ALL_CAPS_LONG_RE,
     AWARENESS_SYMBOLS,
     BRACKETS_ANGLE_RE,

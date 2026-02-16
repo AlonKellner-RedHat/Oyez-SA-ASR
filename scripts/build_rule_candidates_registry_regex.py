@@ -3,7 +3,7 @@
 
 import re
 
-from scripts.collect_asr_artifacts import (
+from scripts.collect_asr_artifacts_regex import (
     DECADE_RE,
     LEADING_DECIMAL_RE,
     ORDINAL_RE,

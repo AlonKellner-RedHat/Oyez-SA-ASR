@@ -4,7 +4,7 @@
 import re
 import string
 
-from scripts.collect_asr_artifacts import (
+from scripts.collect_asr_artifacts_regex import (
     BRACKETS_ANGLE_RE,
     BRACKETS_CURLY_RE,
     BRACKETS_NUMBERED_RE,

@@ -89,13 +89,13 @@ disable = [ "MD013", "MD036", "MD052" ]
 
 [tool.lintok]
 # Edited by Claude: Added exclusions for large files. Edited by Cursor: add scripts/tests over 2048 tokens.
+# When refactoring to remove an exclusion: all new modules must pass lintok; do not add new exclusions.
 max_tokens = 2048
 exclude = [
   "uv.lock",
   "lcov.info",
   "pylock.toml",
   "requirements.txt",
-  "scripts/_dictionary_impl.py",
   "tests/test_build_awareness_candidates.py",
   "tests/test_dictionary_loader.py",
   "src/oyez_sa_asr/cli_dataset_simple_proc.py",
@@ -135,9 +135,6 @@ exclude = [
   "docs/asr_normalization_findings.md",
   "docs/asr_normalization_plan.md",
   "docs/awareness_examples_report.md",
-  "scripts/build_rule_candidates_registry_normalizers.py",
-  "scripts/build_rule_candidates_registry_scanners.py",
-  "scripts/collect_asr_artifacts_text.py",
   "scripts/rule_normalizations/_brackets_accept.py",
   "scripts/rule_normalizations/_numbers.py",
   "src/oyez_sa_asr/cli_dataset_helpers_collect.py",
