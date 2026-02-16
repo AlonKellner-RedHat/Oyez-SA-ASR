@@ -47,10 +47,10 @@ def test_enchant_classifies_valid_words_and_rejects_typos() -> None:
     """When enchant is used, it accepts common inflections and rejects clear typos."""
     import scripts.dictionary_loader as dmod  # noqa: PLC0415
 
-    saved_allow = dmod._ALLOW_NO_ENCHANT
-    saved_cache = dmod._CACHE
+    saved_allow = dmod._dictionary_impl._ALLOW_NO_ENCHANT
+    saved_cache = dmod._dictionary_impl._CACHE
     try:
-        dmod._CACHE = None
+        dmod._dictionary_impl._CACHE = None
         set_allow_no_enchant(False)
         try:
             dic = get_english_dictionary()
@@ -65,18 +65,18 @@ def test_enchant_classifies_valid_words_and_rejects_typos() -> None:
         for word in _ENCHANT_INVALID_WORDS:
             assert word not in dic, f"enchant should reject {word!r}"
     finally:
-        dmod._ALLOW_NO_ENCHANT = saved_allow
-        dmod._CACHE = saved_cache
+        dmod._dictionary_impl._ALLOW_NO_ENCHANT = saved_allow
+        dmod._dictionary_impl._CACHE = saved_cache
 
 
 def test_enchant_classifies_awareness_report_words_as_valid() -> None:
     """Enchant classifies violative, unexhausted, certiorari, etc. as valid (doc report examples)."""
     import scripts.dictionary_loader as dmod  # noqa: PLC0415
 
-    saved_allow = dmod._ALLOW_NO_ENCHANT
-    saved_cache = dmod._CACHE
+    saved_allow = dmod._dictionary_impl._ALLOW_NO_ENCHANT
+    saved_cache = dmod._dictionary_impl._CACHE
     try:
-        dmod._CACHE = None
+        dmod._dictionary_impl._CACHE = None
         set_allow_no_enchant(False)
         try:
             dic = get_english_dictionary()
@@ -92,18 +92,18 @@ def test_enchant_classifies_awareness_report_words_as_valid() -> None:
             )
         assert "ridicularity" not in dic
     finally:
-        dmod._ALLOW_NO_ENCHANT = saved_allow
-        dmod._CACHE = saved_cache
+        dmod._dictionary_impl._ALLOW_NO_ENCHANT = saved_allow
+        dmod._dictionary_impl._CACHE = saved_cache
 
 
 def test_cascade_accepts_awareness_report_words() -> None:
     """Cascade (enchant + WordNet) accepts violative, certiorari, etc.; rejects ridicularity. Edited by Cursor (plan)."""
     import scripts.dictionary_loader as dmod  # noqa: PLC0415
 
-    saved_allow = dmod._ALLOW_NO_ENCHANT
-    saved_cache = dmod._CACHE
+    saved_allow = dmod._dictionary_impl._ALLOW_NO_ENCHANT
+    saved_cache = dmod._dictionary_impl._CACHE
     try:
-        dmod._CACHE = None
+        dmod._dictionary_impl._CACHE = None
         set_allow_no_enchant(False)
         try:
             dic = get_english_dictionary()
@@ -113,18 +113,18 @@ def test_cascade_accepts_awareness_report_words() -> None:
             assert word in dic, f"cascade should accept {word!r}"
         assert "ridicularity" not in dic
     finally:
-        dmod._ALLOW_NO_ENCHANT = saved_allow
-        dmod._CACHE = saved_cache
+        dmod._dictionary_impl._ALLOW_NO_ENCHANT = saved_allow
+        dmod._dictionary_impl._CACHE = saved_cache
 
 
 def test_cascade_rejects_short_non_words() -> None:
     """Cascade rejects short non-words (len < 4) without calling WordNet. TDD: speed opt. Edited by Cursor."""
     import scripts.dictionary_loader as dmod  # noqa: PLC0415
 
-    saved_allow = dmod._ALLOW_NO_ENCHANT
-    saved_cache = dmod._CACHE
+    saved_allow = dmod._dictionary_impl._ALLOW_NO_ENCHANT
+    saved_cache = dmod._dictionary_impl._CACHE
     try:
-        dmod._CACHE = None
+        dmod._dictionary_impl._CACHE = None
         set_allow_no_enchant(False)
         try:
             dic = get_english_dictionary()
@@ -135,8 +135,8 @@ def test_cascade_rejects_short_non_words() -> None:
         for word in ("zq", "qq", "xz"):
             assert word not in dic, f"cascade should reject short non-word {word!r}"
     finally:
-        dmod._ALLOW_NO_ENCHANT = saved_allow
-        dmod._CACHE = saved_cache
+        dmod._dictionary_impl._ALLOW_NO_ENCHANT = saved_allow
+        dmod._dictionary_impl._CACHE = saved_cache
 
 
 def test_cascade_accepts_legal_terms_when_legal_dict_present() -> None:
@@ -145,10 +145,10 @@ def test_cascade_accepts_legal_terms_when_legal_dict_present() -> None:
 
     fixture_path = Path(__file__).resolve().parent / "fixtures" / "legal_words.txt"
     saved_path = getattr(dmod, "_legal_dict_path_override", None)
-    saved_cache = dmod._CACHE
+    saved_cache = dmod._dictionary_impl._CACHE
     try:
         set_legal_dict_path_for_testing(fixture_path)
-        dmod._CACHE = None
+        dmod._dictionary_impl._CACHE = None
         set_allow_no_enchant(False)
         try:
             dic = get_english_dictionary()
@@ -167,7 +167,7 @@ def test_cascade_accepts_legal_terms_when_legal_dict_present() -> None:
             assert word in dic, f"cascade with legal dict should accept {word!r}"
     finally:
         set_legal_dict_path_for_testing(saved_path)
-        dmod._CACHE = saved_cache
+        dmod._dictionary_impl._CACHE = saved_cache
 
 
 def test_cascade_rejects_non_words_even_with_legal_dict() -> None:
@@ -176,10 +176,10 @@ def test_cascade_rejects_non_words_even_with_legal_dict() -> None:
 
     fixture_path = Path(__file__).resolve().parent / "fixtures" / "legal_words.txt"
     saved_path = getattr(dmod, "_legal_dict_path_override", None)
-    saved_cache = dmod._CACHE
+    saved_cache = dmod._dictionary_impl._CACHE
     try:
         set_legal_dict_path_for_testing(fixture_path)
-        dmod._CACHE = None
+        dmod._dictionary_impl._CACHE = None
         set_allow_no_enchant(False)
         try:
             dic = get_english_dictionary()
@@ -189,7 +189,7 @@ def test_cascade_rejects_non_words_even_with_legal_dict() -> None:
             assert word not in dic, f"cascade should reject {word!r}"
     finally:
         set_legal_dict_path_for_testing(saved_path)
-        dmod._CACHE = saved_cache
+        dmod._dictionary_impl._CACHE = saved_cache
 
 
 def test_cascade_unchanged_when_legal_dict_missing() -> None:
@@ -197,10 +197,10 @@ def test_cascade_unchanged_when_legal_dict_missing() -> None:
     import scripts.dictionary_loader as dmod  # noqa: PLC0415
 
     saved_path = getattr(dmod, "_legal_dict_path_override", None)
-    saved_cache = dmod._CACHE
+    saved_cache = dmod._dictionary_impl._CACHE
     try:
         set_legal_dict_path_for_testing(Path("/nonexistent/legal_words.txt"))
-        dmod._CACHE = None
+        dmod._dictionary_impl._CACHE = None
         set_allow_no_enchant(False)
         try:
             dic = get_english_dictionary()
@@ -213,7 +213,7 @@ def test_cascade_unchanged_when_legal_dict_missing() -> None:
             )
     finally:
         set_legal_dict_path_for_testing(saved_path)
-        dmod._CACHE = saved_cache
+        dmod._dictionary_impl._CACHE = saved_cache
 
 
 def test_cascade_accepts_latin_via_enchant_when_la_dict_installed() -> None:
@@ -227,10 +227,10 @@ def test_cascade_accepts_latin_via_enchant_when_la_dict_installed() -> None:
     import scripts.dictionary_loader as dmod  # noqa: PLC0415
 
     saved_path = getattr(dmod, "_legal_dict_path_override", None)
-    saved_cache = dmod._CACHE
+    saved_cache = dmod._dictionary_impl._CACHE
     try:
         set_legal_dict_path_for_testing(Path("/nonexistent/legal_words.txt"))
-        dmod._CACHE = None
+        dmod._dictionary_impl._CACHE = None
         set_allow_no_enchant(False)
         dic = get_english_dictionary()
         latin_words = (
@@ -246,7 +246,7 @@ def test_cascade_accepts_latin_via_enchant_when_la_dict_installed() -> None:
             assert word in dic, f"cascade with Latin dict should accept {word!r}"
     finally:
         set_legal_dict_path_for_testing(saved_path)
-        dmod._CACHE = saved_cache
+        dmod._dictionary_impl._CACHE = saved_cache
 
 
 def test_cascade_accepts_derived_form_when_base_in_legal() -> None:
@@ -255,10 +255,10 @@ def test_cascade_accepts_derived_form_when_base_in_legal() -> None:
 
     fixture_path = Path(__file__).resolve().parent / "fixtures" / "legal_words.txt"
     saved_path = getattr(dmod, "_legal_dict_path_override", None)
-    saved_cache = dmod._CACHE
+    saved_cache = dmod._dictionary_impl._CACHE
     try:
         set_legal_dict_path_for_testing(fixture_path)
-        dmod._CACHE = None
+        dmod._dictionary_impl._CACHE = None
         set_allow_no_enchant(False)
         try:
             dic = get_english_dictionary()
@@ -271,7 +271,7 @@ def test_cascade_accepts_derived_form_when_base_in_legal() -> None:
         )
     finally:
         set_legal_dict_path_for_testing(saved_path)
-        dmod._CACHE = saved_cache
+        dmod._dictionary_impl._CACHE = saved_cache
 
 
 def test_word_candidates_includes_stem_and_morphy() -> None:
@@ -294,10 +294,10 @@ def test_cascade_still_rejects_typos() -> None:
 
     fixture_path = Path(__file__).resolve().parent / "fixtures" / "legal_words.txt"
     saved_path = getattr(dmod, "_legal_dict_path_override", None)
-    saved_cache = dmod._CACHE
+    saved_cache = dmod._dictionary_impl._CACHE
     try:
         set_legal_dict_path_for_testing(fixture_path)
-        dmod._CACHE = None
+        dmod._dictionary_impl._CACHE = None
         set_allow_no_enchant(False)
         try:
             dic = get_english_dictionary()
@@ -307,7 +307,7 @@ def test_cascade_still_rejects_typos() -> None:
         assert "proecedural" not in dic, "cascade should reject typo proecedural"
     finally:
         set_legal_dict_path_for_testing(saved_path)
-        dmod._CACHE = saved_cache
+        dmod._dictionary_impl._CACHE = saved_cache
 
 
 # Target words from awareness_non_dictionary plan; bases in legal fixture. Edited by Cursor.
@@ -338,10 +338,10 @@ def test_cascade_accepts_derived_and_possessive_awareness_words() -> None:
 
     fixture_path = Path(__file__).resolve().parent / "fixtures" / "legal_words.txt"
     saved_path = getattr(dmod, "_legal_dict_path_override", None)
-    saved_cache = dmod._CACHE
+    saved_cache = dmod._dictionary_impl._CACHE
     try:
         set_legal_dict_path_for_testing(fixture_path)
-        dmod._CACHE = None
+        dmod._dictionary_impl._CACHE = None
         set_allow_no_enchant(False)
         try:
             dic = get_english_dictionary()
@@ -355,7 +355,7 @@ def test_cascade_accepts_derived_and_possessive_awareness_words() -> None:
             assert word in dic, f"cascade should accept {word!r} when base is in legal"
     finally:
         set_legal_dict_path_for_testing(saved_path)
-        dmod._CACHE = saved_cache
+        dmod._dictionary_impl._CACHE = saved_cache
 
 
 def test_cascade_accepts_arbitrability_against_actual_dictionary() -> None:
@@ -363,10 +363,10 @@ def test_cascade_accepts_arbitrability_against_actual_dictionary() -> None:
     import scripts.dictionary_loader as dmod  # noqa: PLC0415
 
     saved_path = getattr(dmod, "_legal_dict_path_override", None)
-    saved_cache = dmod._CACHE
+    saved_cache = dmod._dictionary_impl._CACHE
     try:
         set_legal_dict_path_for_testing(None)
-        dmod._CACHE = None
+        dmod._dictionary_impl._CACHE = None
         set_allow_no_enchant(False)
         try:
             dic = get_english_dictionary()
@@ -381,7 +381,7 @@ def test_cascade_accepts_arbitrability_against_actual_dictionary() -> None:
         assert "arbitrability" in dic
     finally:
         set_legal_dict_path_for_testing(saved_path)
-        dmod._CACHE = saved_cache
+        dmod._dictionary_impl._CACHE = saved_cache
 
 
 def test_word_candidates_includes_new_awareness_bases() -> None:
@@ -493,9 +493,9 @@ def test_is_valid_word_cascade_unchanged() -> None:
     """is_valid_word with CascadeChecker matches 'word in checker'."""
     import scripts.dictionary_loader as dmod  # noqa: PLC0415
 
-    saved_cache = dmod._CACHE
+    saved_cache = dmod._dictionary_impl._CACHE
     try:
-        dmod._CACHE = None
+        dmod._dictionary_impl._CACHE = None
         set_allow_no_enchant(True)
         checker = get_english_dictionary()
         if not isinstance(checker, _CascadeChecker):
@@ -503,7 +503,7 @@ def test_is_valid_word_cascade_unchanged() -> None:
         for w in ("accommodation", "ridicularity"):
             assert is_valid_word(w, checker) == (w in checker), w
     finally:
-        dmod._CACHE = saved_cache
+        dmod._dictionary_impl._CACHE = saved_cache
 
 
 def test_is_valid_word_for_rules_single_letter_q_invalid() -> None:
