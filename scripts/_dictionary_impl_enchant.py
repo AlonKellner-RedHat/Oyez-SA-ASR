@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from scripts._dictionary_impl_build import _build_enchant_dicts
@@ -31,9 +32,12 @@ def set_legal_dict_path_for_testing(path: Path | None) -> None:
 
 
 def _get_legal_dict_path() -> Path:
-    """Path to legal words file (override for testing or default)."""
+    """Path to legal words file (env override, testing override, or default)."""
     if _legal_dict_path_override is not None:
         return _legal_dict_path_override
+    env_path = os.environ.get("LEGAL_WORDS_PATH")
+    if env_path:
+        return Path(env_path).resolve()
     return Path(__file__).resolve().parent.parent / _LEGAL_DICT_PATH
 
 

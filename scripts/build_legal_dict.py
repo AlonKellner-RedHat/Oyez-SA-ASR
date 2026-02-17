@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import csv
 import json
 import logging
@@ -182,12 +183,23 @@ def write_legal_words_file(
 
 
 def main() -> None:
-    """Default: read data/legal_sources/*, write data/legal_words.txt. Edited by Cursor."""
+    """Read data/legal_sources/*, write legal words file. Edited by Cursor."""
     root = Path(__file__).resolve().parent.parent
+    parser = argparse.ArgumentParser(
+        description="Build legal words file from LexPredict, Open Legal Dictionary, Wikipedia."
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=root / "data" / "legal_words.txt",
+        help="Output path for legal words (one word per line)",
+    )
+    args = parser.parse_args()
+    out_path = args.output.resolve()
+
     lex_dir = root / "data" / "legal_sources" / "lexpredict-legal-dictionary" / "en"
     old_data_dir = root / "data" / "legal_sources" / "openlegaldictionary" / "_data"
-    out_path = root / "data" / "legal_words.txt"
-
     lexpredict_paths: list[Path] = []
     if lex_dir.exists():
         lexpredict_paths = list(lex_dir.rglob("*.csv"))
